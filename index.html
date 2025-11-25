@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ArcanOS - Web Desktop Simulator</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+    <style>
+        /* Custom Configuration for Tailwind */
+        :root {
+            --arch-cyan: #00bcd4; /* A vibrant teal/cyan */
+        }
+        
+        /* Apply Inter font family by default, use JetBrains Mono for terminal-like text */
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden; /* Hide scrollbars, it's a desktop environment */
+        }
+        
+        .arch-bar {
+            background-color: #171717; /* Very dark background for the bar */
+            color: #f3f4f6;
+            border-bottom: 2px solid var(--arch-cyan);
+            height: 32px;
+            user-select: none;
+        }
+
+        .desktop-bg {
+            background-color: #1a1a1a; /* Main desktop background */
+        }
+        
+        /* Styling for the i3-gaps inspired windows */
+        .i3-window {
+            position: absolute; /* Allows manual positioning and overlap */
+            border: 2px solid #333;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            transition: all 0.3s ease-out; /* Smooth transitions for tiling effects */
+            min-width: 200px;
+            min-height: 100px;
+            display: flex;
+            flex-direction: column;
+            resize: both; /* Allow resizing */
+            overflow: auto; /* Allow content scrolling */
+        }
+        
+        .window-header {
+            cursor: grab;
+            background-color: #262626; /* Dark header */
+            border-bottom: 1px solid #3f3f46;
+            padding: 4px 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .window-title {
+            color: var(--arch-cyan);
+            font-weight: 600;
+            font-size: 0.8rem;
+        }
+
+        .window-controls > button {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            margin-left: 4px;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+
+        .window-controls > button:hover {
+            opacity: 1;
+        }
+
+        .close-btn { background-color: #ef4444; } /* Red */
+        .minimize-btn { background-color: #f59e0b; } /* Amber */
+        .maximize-btn { background-color: #10b981; } /* Emerald */
+
+        .window-content {
+            background-color: #212121; /* Slightly lighter body */
+            flex-grow: 1;
+            padding: 8px;
+            color: #d1d5db;
+            overflow: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+        }
+
+        /* Focus state: Border brightens */
+        .i3-window.focused {
+            border-color: var(--arch-cyan);
+            box-shadow: 0 0 15px var(--arch-cyan);
+            z-index: 100; /* Bring focused window to front */
+        }
+
+        /* Initial Tiling (handled by JS, but defined here for visual safety) */
+        #desktop {
+            position: relative;
+            width: 100vw;
+            height: calc(100vh - 32px); /* Full viewport minus the bar */
+        }
+    </style>
+</head>
+
+<body class="desktop-bg">
+
+    <!-- i3-status Bar Simulation -->
+    <div class="arch-bar flex justify-between items-center px-4 shadow-lg z-20">
+        <!-- Workspace indicators -->
+        <div class="flex space-x-2 text-xs">
+            <span class="px-2 py-0.5 rounded-sm bg-cyan-600 text-gray-900 font-bold">1</span>
+            <span class="px-2 py-0.5 rounded-sm hover:bg-gray-700 transition duration-150">2</span>
+            <span class="px-2 py-0.5 rounded-sm hover:bg-gray-700 transition duration-150">3</span>
+            <span class="px-2 py-0.5 rounded-sm hover:bg-gray-700 transition duration-150">4</span>
+        </div>
+
+        <!-- System Status -->
+        <div class="flex space-x-4 text-xs font-mono">
+            <span>[UP: 0h 4m]</span>
+            <span>[CPU: 12%]</span>
+            <span>[MEM: 3.5G/16G]</span>
+            <span id="datetime-display" class="text-cyan-400 font-semibold"></span>
+        </div>
+    </div>
+
+    <!-- Desktop Area -->
+    <div id="desktop" class="relative">
+        <!-- Windows will be injected here by JavaScript -->
+    </div>
+
+    <script>
+        // --- Desktop Environment Configuration ---
+        const GAP_SIZE = 12; // Gap size in pixels (i3-gaps simulation)
+        const BAR_HEIGHT = 32;
+        const TILE_CONFIG = [
+            // Window 1: Large primary tile (Terminal)
+            { id: 'w1', title: 'Terminal - bash', type: 'terminal', ratio: [0, 0, 70, 100] }, // [x%, y%, w%, h%]
+            
+            // Window 2: Top-right secondary tile (Text Editor)
+            { id: 'w2', title: 'neovim /etc/config.txt', type: 'text', ratio: [70, 0, 30, 50] },
+
+            // Window 3: Bottom-right tertiary tile (Browser/Logs)
+            { id: 'w3', title: 'Firefox - Man Page', type: 'browser', ratio: [70, 50, 30, 50] }
+        ];
+
+        let windows = [];
+        let focusedWindow = null;
+        let isDragging = false;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+
+        const desktopEl = document.getElementById('desktop');
+        const datetimeEl = document.getElementById('datetime-display');
+
+        // --- Utility Functions ---
+
+        /** Updates the date and time display in the top bar. */
+        function updateDateTime() {
+            const now = new Date();
+            const date = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            const time = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+            datetimeEl.textContent = `[${date} | ${time}]`;
+        }
+        setInterval(updateDateTime, 1000);
+        updateDateTime();
+
+
+        /** Calculates the position and size of a tiled window based on the ratio config. */
+        function calculateTiledMetrics(ratio, windowId) {
+            const desktopWidth = desktopEl.clientWidth;
+            const desktopHeight = desktopEl.clientHeight;
+
+            const [ratioX, ratioY, ratioW, ratioH] = ratio;
+
+            // Calculate base dimensions (use 'let' since they will be modified for gaps)
+            let x = desktopWidth * (ratioX / 100);
+            let y = desktopHeight * (ratioY / 100);
+            let w = desktopWidth * (ratioW / 100);
+            let h = desktopHeight * (ratioH / 100);
+            
+            // NOTE: The lines defining and modifying 'const x1, y1, x2, y2' were removed here to fix the TypeError.
+
+            // Adjustments based on position to respect gaps
+            // Left Gap (x position)
+            if (ratioX === 0) x += GAP_SIZE;
+            else x += (GAP_SIZE / 2);
+
+            // Top Gap (y position)
+            if (ratioY === 0) y += GAP_SIZE;
+            else y += (GAP_SIZE / 2);
+
+            // Width adjustment
+            if (ratioX === 0 && ratioX + ratioW === 100) w -= (GAP_SIZE * 2); // Full width: remove gap from left and right
+            else if (ratioX === 0 || ratioX + ratioW === 100) w -= (GAP_SIZE * 1.5); // One edge: remove 1 gap (start/end) and 0.5 gap (middle)
+            else w -= GAP_SIZE; // Middle tile: remove 0.5 gap from each side
+
+            // Height adjustment
+            if (ratioY === 0 && ratioY + ratioH === 100) h -= (GAP_SIZE * 2); // Full height: remove gap from top and bottom
+            else if (ratioY === 0 || ratioY + ratioH === 100) h -= (GAP_SIZE * 1.5); // One edge: remove 1 gap (start/end) and 0.5 gap (middle)
+            else h -= GAP_SIZE; // Middle tile: remove 0.5 gap from each side
+            
+            return {
+                // Return final calculated metrics
+                left: x,
+                top: y,
+                width: Math.max(200, w),
+                height: Math.max(100, h)
+            };
+        }
+
+        /** Applies calculated metrics to a window element. */
+        function applyMetrics(windowEl, metrics) {
+            windowEl.style.left = `${metrics.left}px`;
+            windowEl.style.top = `${metrics.top}px`;
+            windowEl.style.width = `${metrics.width}px`;
+            windowEl.style.height = `${metrics.height}px`;
+        }
+
+        /** Rerenders all visible windows based on the current desktop size. */
+        function tileWindows() {
+            windows.forEach(win => {
+                if (!win.el.classList.contains('hidden')) {
+                    const metrics = calculateTiledMetrics(win.config.ratio, win.config.id);
+                    applyMetrics(win.el, metrics);
+                }
+            });
+        }
+
+        /** Sets the focus state for a window. */
+        function focusWindow(windowEl) {
+            if (focusedWindow) {
+                focusedWindow.classList.remove('focused');
+            }
+            focusedWindow = windowEl;
+            focusedWindow.classList.add('focused');
+        }
+
+        /** Generates content based on window type. */
+        function generateContent(type) {
+            switch (type) {
+                case 'terminal':
+                    return `<div class="p-2 h-full">
+                        <span class="text-cyan-400">arch-web</span><span class="text-white">@</span><span class="text-green-400">canvas</span>:<span class="text-blue-400">~</span>$ <span class="text-white">ls -a</span>
+                        <br>. .config .local .cache
+                        <br>.zshrc .bashrc .i3status.conf
+                        <br><span class="text-cyan-400">arch-web</span><span class="text-white">@</span><span class="text-green-400">canvas</span>:<span class="text-blue-400">~</span>$ <span class="text-white">echo "Welcome to ArcanOS web-desktop!"</span>
+                        <br>Welcome to ArcanOS web-desktop!
+                        <br><span class="text-cyan-400">arch-web</span><span class="text-white">@</span><span class="text-green-400">canvas</span>:<span class="text-blue-400">~</span>$ 
+                    </div>`;
+                case 'text':
+                    return `<textarea class="bg-transparent w-full h-full p-2 resize-none outline-none" placeholder="# i3-gaps config file
+
+set $mod Mod4
+
+# gaps
+gaps inner 10
+gaps outer 5
+
+# Start terminal
+bindsym $mod+Return exec i3-sensible-terminal
+
+# Set background:
+# exec_always feh --bg-fill /path/to/wallpaper.jpg
+
+# End of file"></textarea>`;
+                case 'browser':
+                    return `<div class="p-2">
+                        <p class="text-orange-400 font-bold">MAN PAGE: i3-gaps</p>
+                        <hr class="border-gray-600 my-1">
+                        <p><span class="text-gray-400 font-semibold">NAME</span></p>
+                        <p class="ml-4">i3-gaps - a fork of the i3 window manager with more features, notably the addition of gaps between windows.</p>
+                        <p class="mt-2"><span class="text-gray-400 font-semibold">SYNOPSIS</span></p>
+                        <p class="ml-4">i3 [ <span class="text-white">-c</span> <span class="text-green-400">config_file</span> ]</p>
+                        <p class="mt-2"><span class="text-gray-400 font-semibold">DESCRIPTION</span></p>
+                        <p class="ml-4">i3-gaps maintains the simplicity and efficiency of the original i3 while providing aesthetic improvements for better visual appeal.</p>
+                    </div>`;
+                default:
+                    return `<div class="p-2">Default window content.</div>`;
+            }
+        }
+
+        /** Creates the HTML element for a window. */
+        function createWindowEl(config) {
+            const windowEl = document.createElement('div');
+            windowEl.id = config.id;
+            windowEl.classList.add('i3-window', 'shadow-2xl', 'absolute', 'transition-none');
+            windowEl.innerHTML = `
+                <div class="window-header" data-window-id="${config.id}">
+                    <span class="window-title">${config.title}</span>
+                    <div class="window-controls">
+                        <button class="minimize-btn" title="Minimize" data-action="minimize"></button>
+                        <button class="maximize-btn" title="Toggle Floating" data-action="toggle-floating"></button>
+                        <button class="close-btn" title="Close" data-action="close"></button>
+                    </div>
+                </div>
+                <div class="window-content overflow-hidden flex-grow flex flex-col">
+                    ${generateContent(config.type)}
+                </div>
+            `;
+            
+            // Set initial position and size
+            const metrics = calculateTiledMetrics(config.ratio, config.id);
+            applyMetrics(windowEl, metrics);
+            
+            desktopEl.appendChild(windowEl);
+            
+            // Attach event listeners
+            windowEl.addEventListener('mousedown', () => focusWindow(windowEl));
+            windowEl.querySelector('.window-header').addEventListener('mousedown', startDrag);
+            windowEl.querySelectorAll('.window-controls button').forEach(button => {
+                button.addEventListener('click', (e) => handleWindowControl(e, windowEl));
+            });
+
+            return { el: windowEl, config: config, isFloating: false, lastMetrics: metrics };
+        }
+
+        // --- Window Management ---
+
+        function handleWindowControl(e, windowEl) {
+            const action = e.target.getAttribute('data-action');
+            const win = windows.find(w => w.el === windowEl);
+
+            if (!win) return;
+            
+            // Stop drag event propagation
+            e.stopPropagation();
+
+            switch (action) {
+                case 'close':
+                    windowEl.classList.add('hidden');
+                    break;
+                case 'minimize':
+                    // In a tiling WM, minimize often means hiding or sending to scratchpad
+                    windowEl.classList.add('hidden');
+                    break;
+                case 'toggle-floating':
+                    win.isFloating = !win.isFloating;
+                    
+                    if (win.isFloating) {
+                        // Switch to floating state (centered and smaller)
+                        win.lastMetrics = { 
+                            width: windowEl.offsetWidth, 
+                            height: windowEl.offsetHeight,
+                            left: windowEl.offsetLeft,
+                            top: windowEl.offsetTop
+                        };
+                        
+                        // Center the window in a smaller, defined size
+                        const floatW = desktopEl.clientWidth * 0.5;
+                        const floatH = desktopEl.clientHeight * 0.6;
+                        const floatL = (desktopEl.clientWidth - floatW) / 2;
+                        const floatT = (desktopEl.clientHeight - floatH) / 2;
+                        
+                        windowEl.style.transition = 'all 0.3s ease-in-out';
+                        applyMetrics(windowEl, { left: floatL, top: floatT, width: floatW, height: floatH });
+                        windowEl.querySelector('.window-header').style.cursor = 'grab';
+                    } else {
+                        // Switch back to tiled state
+                        windowEl.style.transition = 'all 0.3s ease-in-out';
+                        applyMetrics(windowEl, win.lastMetrics); // Apply last known metrics (lastMetrics holds the last calculated tiled metrics)
+                        windowEl.querySelector('.window-header').style.cursor = 'grab'; // Still allow dragging if not perfectly tiled
+                    }
+                    break;
+            }
+            // Temporarily disable transition after action
+            setTimeout(() => {
+                 windowEl.style.transition = 'none';
+            }, 300);
+        }
+
+        // --- Drag & Drop (Floating Simulation) ---
+
+        function startDrag(e) {
+            const headerEl = e.currentTarget;
+            const windowEl = headerEl.closest('.i3-window');
+            
+            // Only allow dragging if the window is in a floating state, or we are simulating tiling movement
+            const win = windows.find(w => w.el === windowEl);
+            if (!win) return;
+
+            focusWindow(windowEl);
+            isDragging = true;
+            
+            // Calculate offsets
+            dragOffsetX = e.clientX - windowEl.offsetLeft;
+            dragOffsetY = e.clientY - windowEl.offsetTop;
+
+            windowEl.style.cursor = 'grabbing';
+            headerEl.style.cursor = 'grabbing';
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', endDrag);
+            e.preventDefault(); // Prevent default text selection
+        }
+
+        function drag(e) {
+            if (!isDragging || !focusedWindow) return;
+
+            let newX = e.clientX - dragOffsetX;
+            let newY = e.clientY - dragOffsetY;
+
+            // Keep window within desktop bounds (with gaps)
+            const maxLeft = desktopEl.clientWidth - focusedWindow.offsetWidth - GAP_SIZE;
+            const maxTop = desktopEl.clientHeight - focusedWindow.offsetHeight - GAP_SIZE;
+
+            newX = Math.max(GAP_SIZE, Math.min(newX, maxLeft));
+            newY = Math.max(GAP_SIZE, Math.min(newY, maxTop));
+            
+            focusedWindow.style.left = `${newX}px`;
+            focusedWindow.style.top = `${newY}px`;
+        }
+
+        function endDrag() {
+            if (!isDragging || !focusedWindow) return;
+
+            isDragging = false;
+            focusedWindow.style.cursor = 'default';
+            focusedWindow.querySelector('.window-header').style.cursor = 'grab';
+
+            // Clean up event listeners
+            document.removeEventListener('mousemove', drag);
+            document.removeEventListener('mouseup', endDrag);
+        }
+
+        // --- Initialization ---
+
+        function initDesktop() {
+            // Create and position initial windows
+            TILE_CONFIG.forEach(config => {
+                const win = createWindowEl(config);
+                windows.push(win);
+                focusWindow(win.el); // Focus the last created window
+            });
+
+            // Re-tile on window resize
+            window.addEventListener('resize', tileWindows);
+
+            // Initial tile layout
+            tileWindows();
+        }
+
+        // Run initialization when the window loads
+        window.onload = initDesktop;
+
+    </script>
+</body>
+</html>
