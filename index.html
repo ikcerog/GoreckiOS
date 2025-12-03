@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GoreckiOS - Web Desktop Simulator (Interactive)</title>
+    <title>GoreckiOS - Web Desktop Simulator (Encrypted)</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght400&display=swap" rel="stylesheet">
@@ -15,7 +15,6 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        // Import Firestore functions and expose them globally
         import { getFirestore, doc, setDoc, getDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Global Firebase Variables (provided by the environment)
@@ -23,18 +22,14 @@
         window.firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
         window.__initial_auth_token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-        // Initialize Firebase and expose core services globally
+        // Expose Firebase services globally
         if (Object.keys(window.firebaseConfig).length > 0) {
             const app = initializeApp(window.firebaseConfig);
             window.db = getFirestore(app);
             window.auth = getAuth(app);
-            
-            // Expose the necessary Firestore functions to the global scope (window)
             window.firestoreDoc = doc;
             window.firestoreSetDoc = setDoc;
             window.firestoreGetDoc = getDoc;
-            
-            // Set logging for debugging Firestore operations
             setLogLevel('Debug'); 
         } else {
             console.error("Firebase config is missing. Persistence will not work.");
@@ -49,19 +44,19 @@
                     } else {
                         await signInAnonymously(window.auth);
                     }
-                    // Once authenticated, get the user ID
                     window.userId = window.auth.currentUser.uid;
                     console.log("Firebase Auth successful. User ID:", window.userId);
                 }
             } catch (error) {
                 console.error("Firebase Authentication Error:", error);
-                // Fallback to a random ID if auth fails, but persistence won't work correctly.
                 window.userId = crypto.randomUUID(); 
             }
         };
 
-        // Initialize the desktop once authentication is ready
-        window.initFirebaseAuth().then(window.initDesktop); 
+        // Start Auth, then prompt for password, then init desktop
+        window.initFirebaseAuth().then(() => {
+            document.getElementById('password-modal').showModal();
+        }); 
 
     </script>
     
@@ -71,7 +66,6 @@
             --arch-cyan: #00bcd4; /* A vibrant teal/cyan */
         }
         
-        /* Apply Inter font family by default, use JetBrains Mono for terminal-like text */
         body {
             font-family: 'Inter', sans-serif;
             overflow: hidden; 
@@ -87,10 +81,8 @@
             user-select: none;
         }
 
-        /* 90s Minimalist Diagonal Stripe Background */
         .desktop-bg {
             background-color: #1a1a1a; 
-            /* Subtle diagonal stripes: dark gray (#212121) on background (#1a1a1a) */
             background-image: linear-gradient(
                 -45deg, 
                 #212121 25%, 
@@ -104,14 +96,12 @@
             background-size: 20px 20px;
         }
         
-        /* Desktop area must account for the top bar (32px) and the bottom taskbar (32px) */
         #desktop {
             position: relative;
             width: 100vw;
-            height: calc(100vh - 64px); /* 32px (top bar) + 32px (taskbar) */
+            height: calc(100vh - 64px); 
         }
 
-        /* Taskbar Styles */
         #taskbar {
             position: fixed;
             bottom: 0;
@@ -152,7 +142,6 @@
             box-shadow: 0 0 8px rgba(0, 189, 212, 0.5);
         }
         
-        /* Styling for the i3-gaps inspired windows */
         .i3-window {
             position: absolute; 
             border: 2px solid #333;
@@ -167,7 +156,6 @@
             overflow: hidden; 
         }
         
-        /* Class to disable transition during drag */
         .i3-window.no-transition {
             transition: none !important;
         }
@@ -217,7 +205,6 @@
             padding: 8px;
         }
 
-        /* Terminal Specific Styles */
         #terminal-output {
             flex-grow: 1;
             white-space: pre-wrap; 
@@ -241,7 +228,6 @@
             caret-color: var(--arch-cyan);
         }
 
-        /* Focus state: Border brightens */
         .i3-window.focused {
             border-color: var(--arch-cyan);
             box-shadow: 0 0 15px rgba(0, 189, 212, 0.7); 
@@ -252,9 +238,6 @@
             color: #93c5fd; 
         }
 
-        /* Initial Tiling */
-        
-        /* CMatrix Canvas ensures no padding/margin from window content */
         .cmatrix-container {
             padding: 0;
             margin: 0;
@@ -267,7 +250,6 @@
             background-color: #0a0a0a;
         }
         
-        /* Textarea style for config window */
         #config-textarea {
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.85rem;
@@ -276,6 +258,18 @@
 </head>
 
 <body class="desktop-bg">
+
+    <!-- Password Prompt Modal -->
+    <dialog id="password-modal" class="rounded-lg shadow-2xl backdrop:bg-gray-900/80 p-8 w-96 bg-gray-800 text-gray-100">
+        <h2 class="text-xl font-bold mb-4 text-cyan-400">Encrypted State Access</h2>
+        <p class="mb-4 text-sm">Enter a password to encrypt/decrypt your desktop state. If no state is saved yet, this password will be used to initialize encryption.</p>
+        <div id="password-error" class="text-red-400 text-sm mb-2 hidden">Decryption failed. Please check your password.</div>
+        <form id="password-form" method="dialog">
+            <input type="password" id="encryption-password" placeholder="Enter encryption password" class="w-full p-2 mb-4 rounded bg-gray-700 text-white border border-gray-600 focus:border-cyan-400 outline-none">
+            <button type="submit" class="w-full bg-cyan-600 text-gray-900 font-semibold py-2 rounded hover:bg-cyan-500 transition duration-150">Start Desktop</button>
+        </form>
+    </dialog>
+
 
     <!-- i3-status Bar Simulation -->
     <div class="arch-bar flex justify-between items-center px-4 shadow-lg z-20">
@@ -305,31 +299,24 @@
 
     <script>
         // --- Gemini API Configuration ---
-        // IMPORTANT: REPLACE "YOUR_API_KEY_HERE" WITH your actual Gemini API Key Key string.
-        const API_KEY = ""; // Using an empty string for Canvas environment
+        const API_KEY = ""; 
         const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${API_KEY}`;
-        
-        // System instruction to define the persona of the shell
         const SHELL_PROMPT = `You are a sarcastic, witty, and extremely knowledgeable Arch Linux shell assistant named 'GoreckiOS'. Your responses must mimic Linux terminal output.
         
         1. Format your output as simple plain text, simulating a terminal response.
-        2. NEVER use markdown formatting like **bold** or *italics*.
+        2. NEVER use markdown formatting like **bold** or *italics'.
         3. Do not include the user's prompt or the shell prompt in your response.
         4. If asked a command that doesn't exist (like 'run_app'), give a witty error message, maybe referencing 'pacman' or 'AUR'.
         5. Answer questions about Linux, coding, configuration, or general knowledge with a superior, Arch-user attitude.
-        6. Keep responses concise, typically 2-4 lines of output.
-        
-        Example Output for 'pacman -Syu':
-        :: Synchronizing package databases...
-        core is up to date
-        extra is up to date
-        :: Arch is up to date. You expected anything less?`;
+        6. Keep responses concise, typically 2-4 lines of output.`;
+
+        // --- Encryption Global State ---
+        let encryptionKey = null; // Stored key derived from password
+        let encryptionSalt = null; // Salt used for key derivation (stored in Firestore)
 
         // --- Desktop Environment Configuration ---
         const GAP_SIZE = 12; 
-        
-        // Default content for the editable config file
-        let configContent = `# i3-gaps config file (Persistence enabled!)
+        let configContent = `# i3-gaps config file (Encrypted Persistence enabled!)
 
 set $mod Mod4
 
@@ -345,7 +332,6 @@ bindsym $mod+Return exec i3-sensible-terminal
 
 # End of file`;
         
-        // Configuration for all workspaces
         const WORKSPACES = {
             '1': [
                 { id: 'w1', title: 'Terminal - bash (GoreckiOS Shell)', type: 'terminal', ratio: [0, 0, 70, 100], isFloating: false, content: null }, 
@@ -353,16 +339,15 @@ bindsym $mod+Return exec i3-sensible-terminal
                 { id: 'w3', title: 'Background Process: Matrix', type: 'cmatrix-window', ratio: [70, 50, 30, 50], isFloating: false, content: null } 
             ],
             '2': [
-                // Example of a floating window for a different task on Workspace 2
                 { id: 'w4', title: 'Project Alpha - Documentation', type: 'text', ratio: [10, 10, 80, 80], isFloating: true, content: 'This is a floating document on Workspace 2. Edits here are saved.' } 
             ],
-            '3': [], // Empty workspace
-            '4': []  // Empty workspace
+            '3': [], 
+            '4': []  
         };
 
         // State Management
-        let allWindows = {}; // Stores all instantiated window objects across all workspaces
-        let windows = [];    // Stores currently visible window objects (for tiling/rendering)
+        let allWindows = {};
+        let windows = [];
         let focusedWindow = null;
         let currentWorkspace = '1';
         let isDragging = false;
@@ -376,35 +361,99 @@ bindsym $mod+Return exec i3-sensible-terminal
         const datetimeEl = document.getElementById('datetime-display');
         const taskbarEl = document.getElementById('taskbar');
         const getWorkspaceBar = () => document.getElementById('workspace-bar');
-
-        // --- Core Utility Functions (Including API and Tiling) ---
         
+        // --- Web Crypto Encryption/Decryption Functions ---
+
+        const ENCRYPTION_ALGO = 'AES-GCM';
+        const KEY_DERIVATION_ALGO = 'PBKDF2';
+        const ITERATIONS = 100000;
+        const KEY_LEN = 256;
+
+        /** Derives an encryption key from the password and salt. */
+        async function deriveKey(password, salt) {
+            const enc = new TextEncoder();
+            const passwordBuffer = enc.encode(password);
+            
+            const baseKey = await crypto.subtle.importKey(
+                'raw',
+                passwordBuffer,
+                KEY_DERIVATION_ALGO,
+                false,
+                ['deriveKey']
+            );
+
+            return crypto.subtle.deriveKey(
+                {
+                    name: KEY_DERIVATION_ALGO,
+                    salt: salt,
+                    iterations: ITERATIONS,
+                    hash: 'SHA-256'
+                },
+                baseKey,
+                { name: ENCRYPTION_ALGO, length: KEY_LEN },
+                false,
+                ['encrypt', 'decrypt']
+            );
+        }
+
+        /** Encrypts data using the derived key. */
+        async function encryptState(data, key) {
+            const dataString = JSON.stringify(data);
+            const dataBuffer = new TextEncoder().encode(dataString);
+            
+            // Generate a random 12-byte IV (Initialization Vector) for AES-GCM
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+
+            const encryptedBuffer = await crypto.subtle.encrypt(
+                { name: ENCRYPTION_ALGO, iv: iv },
+                key,
+                dataBuffer
+            );
+
+            // Return IV and ciphertext (as base64 strings)
+            return {
+                iv: btoa(String.fromCharCode(...new Uint8Array(iv))),
+                ciphertext: btoa(String.fromCharCode(...new Uint8Array(encryptedBuffer)))
+            };
+        }
+
+        /** Decrypts data using the derived key. */
+        async function decryptState(encryptedData, key) {
+            try {
+                const iv = Uint8Array.from(atob(encryptedData.iv), c => c.charCodeAt(0));
+                const ciphertext = Uint8Array.from(atob(encryptedData.ciphertext), c => c.charCodeAt(0));
+
+                const decryptedBuffer = await crypto.subtle.decrypt(
+                    { name: ENCRYPTION_ALGO, iv: iv },
+                    key,
+                    ciphertext
+                );
+                
+                const decryptedString = new TextDecoder().decode(decryptedBuffer);
+                return JSON.parse(decryptedString);
+
+            } catch (e) {
+                console.error("Decryption failed:", e);
+                return null; // Return null on decryption failure
+            }
+        }
+        
+        // --- Firestore Persistence Functions ---
+
         /** Retrieves the Firestore document reference for desktop state. */
         function getStateDocRef() {
-            // Check for the globally exposed functions and objects
             if (!window.db || !window.userId || !window.firestoreDoc) return null;
-            
-            // Private data path for persistence: /artifacts/{appId}/users/{userId}/desktop_state/config
             return window.firestoreDoc(window.db, 'artifacts', window.__app_id, 'users', window.userId, 'desktop_state', 'config');
         }
 
-        /** Saves the current application state to Firestore. */
+        /** Saves the current application state to Firestore, encrypted. */
         async function saveState() {
             const stateDocRef = getStateDocRef();
-            if (!stateDocRef || !window.firestoreSetDoc) return;
+            if (!stateDocRef || !window.firestoreSetDoc || !encryptionKey) return;
 
-            // 1. Ensure the currently focused text window's content is saved to allWindows
-            if (focusedWindow) {
-                const textarea = focusedWindow.querySelector('#config-textarea');
-                if (textarea) {
-                    allWindows[focusedWindow.id].config.content = textarea.value;
-                }
-            }
-            
-            // 2. Prepare data for storage: only store persistent fields
+            // 1. Prepare data for storage: only store persistent fields
             const dataToSave = {};
             
-            // Transform allWindows into a simpler, storable format
             Object.keys(allWindows).forEach(winId => {
                 const win = allWindows[winId];
                 
@@ -427,66 +476,77 @@ bindsym $mod+Return exec i3-sensible-terminal
             });
             
             try {
+                const encrypted = await encryptState(dataToSave, encryptionKey);
+                
+                // Store the encrypted state along with the salt
                 await window.firestoreSetDoc(stateDocRef, {
                     timestamp: new Date().toISOString(),
-                    windowStates: dataToSave
+                    salt: btoa(String.fromCharCode(...new Uint8Array(encryptionSalt))),
+                    encryptedState: encrypted
                 }, { merge: true });
             } catch (error) {
                 console.error("Failed to save state to Firestore:", error);
             }
         }
         
-        /** Loads the application state from Firestore. */
-        async function loadState() {
+        /** Loads the encrypted application state from Firestore and attempts decryption. */
+        async function loadState(password) {
             const stateDocRef = getStateDocRef();
             if (!stateDocRef || !window.firestoreGetDoc) return null;
 
             try {
                 const docSnap = await window.firestoreGetDoc(stateDocRef);
                 if (docSnap.exists()) {
-                    return docSnap.data().windowStates;
+                    const data = docSnap.data();
+                    const b64Salt = data.salt;
+                    const encryptedData = data.encryptedState;
+                    
+                    if (!b64Salt || !encryptedData) {
+                         // Data exists but is not encrypted. Treat as a new state setup.
+                         return null;
+                    }
+                    
+                    // 1. Convert Base64 Salt back to Uint8Array and store globally
+                    encryptionSalt = Uint8Array.from(atob(b64Salt), c => c.charCodeAt(0));
+                    
+                    // 2. Derive key using the provided password and stored salt
+                    encryptionKey = await deriveKey(password, encryptionSalt);
+
+                    // 3. Attempt decryption
+                    const decrypted = await decryptState(encryptedData, encryptionKey);
+                    
+                    if (decrypted) {
+                        return decrypted;
+                    } else {
+                        // Decryption failed (wrong password)
+                        return false; 
+                    }
+                } else {
+                    // Document does not exist. Initialize a new state.
+                    // Generate a new salt and key
+                    encryptionSalt = crypto.getRandomValues(new Uint8Array(16));
+                    encryptionKey = await deriveKey(password, encryptionSalt);
+                    return {}; // Empty object for new state
                 }
             } catch (error) {
-                console.error("Failed to load state from Firestore:", error);
+                console.error("Failed to load or process state:", error);
+                return null; // General error
             }
-            return null;
         }
 
+        // --- Core Utility Functions (Tiling, Terminal, etc. - largely unchanged) ---
+        // (Tiling, Tone.js, Terminal handling, Workspace, Drag/Drop logic are preserved from the previous version)
 
-        /** Retry logic for API calls using exponential backoff. */
-        async function fetchWithBackoff(url, options, maxRetries = 5) {
-            for (let i = 0; i < maxRetries; i++) {
-                // If API_KEY is missing, immediately fail with a helpful error
-                if (API_KEY === "YOUR_API_KEY_HERE" || !API_KEY) {
-                    // This is for local testing. In Canvas, the key is provided dynamically.
-                    // return new Response(JSON.stringify({ error: "API Key Missing" }), { status: 500 });
-                }
-
-                try {
-                    const response = await fetch(url, options);
-                    if (response.status !== 429) return response; 
-                } catch (error) {
-                    console.error('Fetch attempt failed:', error);
-                }
-                const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
-                await new Promise(resolve => setTimeout(resolve, delay));
-            }
-            throw new Error('API request failed after multiple retries.');
-        }
-
-        /** Plays a success tone using Tone.js. */
         function playSuccessTone() {
             if (!successSynth) return;
             successSynth.triggerAttackRelease("C4", "8n");
         }
         
-        /** Plays a failure tone using Tone.js. */
         function playFailureTone() {
             if (!successSynth) return;
             successSynth.triggerAttackRelease("C2", "8n");
         }
 
-        /** Updates the date and time display. */
         function updateDateTime() {
             const now = new Date();
             const date = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -494,7 +554,6 @@ bindsym $mod+Return exec i3-sensible-terminal
             datetimeEl.textContent = `[${date} | ${time}]`;
         }
 
-        /** Calculates the position and size of a tiled window based on the ratio config. */
         function calculateTiledMetrics(ratio) {
             const desktopWidth = desktopEl.clientWidth;
             const desktopHeight = desktopEl.clientHeight;
@@ -529,7 +588,6 @@ bindsym $mod+Return exec i3-sensible-terminal
             };
         }
 
-        /** Applies calculated metrics to a window element. */
         function applyMetrics(windowEl, metrics) {
             windowEl.style.left = `${metrics.left}px`;
             windowEl.style.top = `${metrics.top}px`;
@@ -537,37 +595,28 @@ bindsym $mod+Return exec i3-sensible-terminal
             windowEl.style.height = `${metrics.height}px`;
         }
 
-        /** Rerenders all visible windows based on the current desktop size. */
         function tileWindows() {
             windows.forEach(win => {
-                // Only re-tile if the window is NOT floating and not hidden
                 if (!win.el.classList.contains('hidden') && !win.isFloating) {
                     const metrics = calculateTiledMetrics(win.config.ratio);
                     applyMetrics(win.el, metrics);
-                    win.lastMetrics = metrics; // Update last metrics for reference
+                    win.lastMetrics = metrics;
                     
-                    // Special case for matrix canvas resize
                     if (win.config.type === 'cmatrix-window') {
                         const canvas = win.el.querySelector('#matrix-canvas');
                         if (canvas) {
-                            // CMatrix needs canvas width/height attributes set
-                            // Adjusting for window content padding (8px on each side = 16px)
                             canvas.width = metrics.width - 16; 
-                            // Header (32px) + Content top padding (8px) + Content bottom padding (8px)
-                            canvas.height = metrics.height - 48; // 32 (header) + 8 (top pad) + 8 (bottom pad) 
+                            canvas.height = metrics.height - 48;
                         }
                     }
                 }
             });
         }
 
-        /** Sets the focus state for a window and handles content saving/loading. */
         function focusWindow(windowEl) {
-            // 1. Save content/state of the previously focused window
             if (focusedWindow && focusedWindow !== windowEl) {
                 focusedWindow.classList.remove('focused');
                 
-                // Update taskbar button state for previously focused window
                 const prevTaskbarItem = taskbarEl.querySelector(`[data-window-id="${focusedWindow.id}"]`);
                 if (prevTaskbarItem) {
                     prevTaskbarItem.classList.remove('active');
@@ -575,14 +624,12 @@ bindsym $mod+Return exec i3-sensible-terminal
 
                 const prevWinData = allWindows[focusedWindow.id];
 
-                // Save content for text windows
                 if (prevWinData && prevWinData.config.type === 'text') {
                     const textarea = focusedWindow.querySelector('#config-textarea');
                     if (textarea) {
                         prevWinData.config.content = textarea.value;
                     }
                 }
-                // Save window position/size 
                 prevWinData.lastMetrics = { 
                     width: focusedWindow.offsetWidth, 
                     height: focusedWindow.offsetHeight,
@@ -590,28 +637,23 @@ bindsym $mod+Return exec i3-sensible-terminal
                     top: focusedWindow.offsetTop
                 };
                 
-                // Trigger a state save to Firestore
                 saveState();
             }
             
-            // 2. Set focus on the new window
             focusedWindow = windowEl;
             focusedWindow.classList.add('focused');
 
-            // Update taskbar button state for newly focused window
             const taskbarItem = taskbarEl.querySelector(`[data-window-id="${windowEl.id}"]`);
             if (taskbarItem) {
                 taskbarItem.classList.add('active');
             }
             
-            // Bring to front
             let maxZIndex = 100;
             document.querySelectorAll('.i3-window:not(.focused)').forEach(el => {
                 maxZIndex = Math.max(maxZIndex, parseInt(el.style.zIndex || 0));
             });
             windowEl.style.zIndex = maxZIndex + 1;
             
-            // 3. Load content and set focus on input
             const winData = allWindows[windowEl.id];
             
             if (winData.config.type === 'terminal') {
@@ -619,29 +661,21 @@ bindsym $mod+Return exec i3-sensible-terminal
             } else if (winData.config.type === 'text') {
                 const textarea = windowEl.querySelector('#config-textarea');
                 if (textarea) {
-                    // Load content from winData (which was loaded from Firestore or default)
                     textarea.value = winData.config.content || ''; 
                     textarea.focus();
                 }
             }
         }
         
-        // --- CMatrix Effect Logic ---
         function createMatrixEffect(canvas) {
             const ctx = canvas.getContext('2d');
-            const katakana = 'アァカサタナハマヤャラワガザダバパ';
-            const latin = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-            const numbers = '0123456789';
-            const symbols = '!@#$%^&*()_+';
-            const chars = (katakana + latin + numbers + symbols).split('');
-
+            const chars = ('アァカサタナハマヤャラワガザダバパ' + 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' + '0123456789' + '!@#$%^&*()_+').split('');
             let fontSize = 16;
             let columns;
             let drops = [];
             
             function initializeMatrix() {
                 const container = canvas.closest('.window-content');
-                // Use offsetWidth/Height as the content div has padding
                 canvas.width = container.offsetWidth - 16; 
                 canvas.height = container.offsetHeight - 16; 
 
@@ -651,21 +685,13 @@ bindsym $mod+Return exec i3-sensible-terminal
                     drops[x] = 1; 
                 }
             }
-
-            // Initial call
             initializeMatrix();
-
-            // Setup ResizeObserver to automatically adjust canvas size
-            const observer = new ResizeObserver(() => {
-                initializeMatrix();
-            });
+            const observer = new ResizeObserver(() => { initializeMatrix(); });
             observer.observe(canvas.closest('.i3-window'));
-
 
             function draw() {
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
-
                 ctx.fillStyle = '#0f0'; 
                 ctx.font = fontSize + 'px monospace';
 
@@ -673,21 +699,16 @@ bindsym $mod+Return exec i3-sensible-terminal
                     const text = chars[Math.floor(Math.random() * chars.length)];
                     const x = i * fontSize;
                     const y = drops[i] * fontSize;
-
                     ctx.fillText(text, x, y);
 
                     if (y * 0.9 > canvas.height && Math.random() > 0.975) {
                         drops[i] = 0;
                     }
-
                     drops[i]++;
                 }
             }
-
             setInterval(draw, 33); 
         }
-
-        // --- Terminal Interaction Logic ---
 
         const PROMPT_TEXT = '<span class="text-cyan-400">goreck-web</span><span class="text-white">@</span><span class="text-green-400">canvas</span>:<span class="text-blue-400">~</span>$ ';
 
@@ -702,7 +723,6 @@ bindsym $mod+Return exec i3-sensible-terminal
             };
         }
         
-        /** Renders the current state of the terminal history. */
         function renderTerminalOutput() {
             const { output } = getTerminalElements();
             if (!output) return;
@@ -721,7 +741,6 @@ bindsym $mod+Return exec i3-sensible-terminal
             }, 10); 
         }
 
-        /** Handles the user submitting a command in the terminal. */
         async function handleCommand(e) {
             if (e.key !== 'Enter') return;
             const { input, output, inputContainer } = getTerminalElements();
@@ -734,21 +753,18 @@ bindsym $mod+Return exec i3-sensible-terminal
                 return;
             }
 
-            // 1. Add command to history and disable input
             terminalHistory.push({ role: 'user', text: command });
             input.value = '';
             input.disabled = true;
             inputContainer.classList.add('opacity-50');
             renderTerminalOutput();
             
-            // 2. Add temporary loading indicator
             const loadingIndex = terminalHistory.length;
             terminalHistory.push({ role: 'llm', text: '<span class="text-yellow-400">loading...</span>' });
             renderTerminalOutput();
             
             let success = false;
             try {
-                // 3. Construct API Payload
                 const payload = {
                     contents: [{ parts: [{ text: command }] }],
                     systemInstruction: { parts: [{ text: SHELL_PROMPT }] },
@@ -757,7 +773,6 @@ bindsym $mod+Return exec i3-sensible-terminal
                     }
                 };
 
-                // 4. Fetch response using backoff
                 const response = await fetchWithBackoff(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -767,32 +782,35 @@ bindsym $mod+Return exec i3-sensible-terminal
                 const result = await response.json();
                 const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "Error: Failed to get response from server.";
 
-                // 5. Update history with LLM response
                 terminalHistory[loadingIndex] = { role: 'llm', text: text };
-                success = true; // Mark as successful
+                success = true;
             } catch (error) {
                 console.error('API or Fetch Error:', error);
-                const errorMessage = error.message.includes("API Key Missing") 
-                    ? `Error: API Key Missing. Please insert your key in the 'index.html' file.`
-                    : `Error: Connection failed. Check network or API key setup.`;
+                const errorMessage = `Error: Connection failed. Check network or API key setup.`;
                 terminalHistory[loadingIndex] = { role: 'llm', text: errorMessage };
-                success = false; // Mark as failed
+                success = false;
             } finally {
-                // 6. Play sound and re-enable input and render final output
-                if (success) {
-                    playSuccessTone();
-                } else {
-                    playFailureTone();
-                }
-                
+                if (success) { playSuccessTone(); } else { playFailureTone(); }
                 input.disabled = false;
                 inputContainer.classList.remove('opacity-50');
                 renderTerminalOutput();
             }
         }
+        
+        async function fetchWithBackoff(url, options, maxRetries = 5) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.status !== 429) return response; 
+                } catch (error) {
+                    console.error('Fetch attempt failed:', error);
+                }
+                const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+            throw new Error('API request failed after multiple retries.');
+        }
 
-
-        /** Generates content based on window type. */
         function generateContent(config) {
             switch (config.type) {
                 case 'terminal':
@@ -808,19 +826,16 @@ bindsym $mod+Return exec i3-sensible-terminal
                         </div>
                     `;
                 case 'text':
-                    // Note: value is loaded dynamically during focusWindow
                     return `<textarea id="config-textarea" class="bg-transparent w-full h-full p-2 resize-none outline-none" placeholder="Loading content..."></textarea>`;
                 case 'cmatrix-window':
                     return `<div class="cmatrix-container"><canvas id="matrix-canvas"></canvas></div>`;
-
                 default:
                     return `<div class="p-2">Default window content.</div>`;
             }
         }
         
-        // --- Taskbar Management ---
         function updateTaskbar() {
-            taskbarEl.innerHTML = ''; // Clear taskbar
+            taskbarEl.innerHTML = ''; 
             
             windows.forEach(win => {
                 const button = document.createElement('div');
@@ -840,47 +855,38 @@ bindsym $mod+Return exec i3-sensible-terminal
             });
         }
         
-        /** Restores a minimized or inactive window. */
         function restoreWindow(windowEl) {
             if (windowEl.classList.contains('hidden')) {
                 windowEl.classList.remove('hidden');
             }
             focusWindow(windowEl);
-            tileWindows(); // Retile in case it was tiled and screen resized
+            tileWindows();
         }
 
-        /** Creates the HTML element for a window. */
         function createWindowEl(config, savedState = {}) {
             const windowEl = document.createElement('div');
             windowEl.id = config.id;
             windowEl.classList.add('i3-window', 'shadow-2xl', 'absolute'); 
             
-            // Set up the internal data object
             let winData = { 
                 el: windowEl, 
-                config: { ...config, currentWorkspace: currentWorkspace }, // Add current workspace for tracking
+                config: { ...config, currentWorkspace: currentWorkspace },
                 isFloating: savedState.isFloating !== undefined ? savedState.isFloating : config.isFloating, 
-                // Restore lastMetrics or use a temporary placeholder
                 lastMetrics: savedState.lastMetrics || {} 
             };
             
-            // Handle content persistence initialization
             if (config.type === 'text') {
                 if (savedState.content !== undefined) {
                     winData.config.content = savedState.content; 
                 } else if (config.id === 'w2') {
-                    // Use global config default on first creation
                     winData.config.content = configContent; 
                 } else if (config.content) {
-                    // Use config's default content
                     winData.config.content = config.content;
                 } else {
                      winData.config.content = `[Window ${config.id}] Starting blank document on Workspace ${currentWorkspace}.`;
                 }
             }
 
-
-            // Special styling for the CMatrix window content (no padding)
             const contentClass = config.type === 'cmatrix-window' ? 'window-content p-0' : 'window-content';
 
             windowEl.innerHTML = `
@@ -897,23 +903,17 @@ bindsym $mod+Return exec i3-sensible-terminal
                 </div>
             `;
             
-            // Apply position and size based on saved state or tiling
             if (winData.isFloating && winData.lastMetrics.width) {
                 applyMetrics(windowEl, winData.lastMetrics);
             } else {
                 const metrics = calculateTiledMetrics(config.ratio);
                 applyMetrics(windowEl, metrics);
-                winData.lastMetrics = metrics; // Save initial tiled metrics
+                winData.lastMetrics = metrics;
             }
 
             desktopEl.appendChild(windowEl);
             
-            // Attach event listeners
-            windowEl.addEventListener('mousedown', (e) => {
-                focusWindow(windowEl);
-            });
-            
-            // Save state on end of resize
+            windowEl.addEventListener('mousedown', (e) => { focusWindow(windowEl); });
             windowEl.addEventListener('mouseup', saveState); 
             
             windowEl.querySelector('.window-header').addEventListener('mousedown', startDrag);
@@ -921,11 +921,9 @@ bindsym $mod+Return exec i3-sensible-terminal
                 button.addEventListener('click', (e) => handleWindowControl(e, windowEl));
             });
             
-            // Post-creation setup for CMatrix
             if (config.type === 'cmatrix-window') {
                 const canvas = windowEl.querySelector('#matrix-canvas');
                 if (canvas) {
-                    // Initialize CMatrix (draw loop starts inside)
                     createMatrixEffect(canvas);
                 }
             }
@@ -933,19 +931,13 @@ bindsym $mod+Return exec i3-sensible-terminal
             return winData;
         }
         
-        // --- Workspace Management ---
         function switchWorkspace(targetId) {
             if (targetId === currentWorkspace) return;
 
-            // 1. Save the state of the currently focused window
-            if (focusedWindow) {
-                focusWindow(focusedWindow); // This triggers the save logic
-            }
+            if (focusedWindow) { focusWindow(focusedWindow); }
 
-            // 2. Hide all currently visible windows
             windows.forEach(win => win.el.classList.add('hidden'));
 
-            // 3. Update status bar styling
             const bar = getWorkspaceBar();
             bar.querySelectorAll('.workspace-btn').forEach(btn => {
                 btn.classList.remove('bg-cyan-600', 'text-gray-900', 'font-bold');
@@ -958,39 +950,27 @@ bindsym $mod+Return exec i3-sensible-terminal
                 newButton.classList.remove('hover:bg-gray-700');
             }
 
-            // 4. Update current workspace and load/show new windows
             currentWorkspace = targetId;
-            windows = []; // Reset the visible window array
+            windows = [];
 
             const configsToLoad = WORKSPACES[targetId] || [];
 
             configsToLoad.forEach(config => {
                 let win = allWindows[config.id];
                 
-                // If window doesn't exist (first time on this workspace), create it
                 if (!win) {
-                    // Search if this window ID was used on another workspace
                     const existingConfig = Object.values(WORKSPACES).flat().find(c => c.id === config.id);
-                    // Create from scratch if truly new
                     win = createWindowEl(existingConfig || config);
                     allWindows[config.id] = win;
                 } 
                 
-                // Only show windows configured for the current workspace
-                // NOTE: We don't check win.config.currentWorkspace as windows are created on workspace 1 initially.
-                // Instead, we rely on the WORKSPACES map for which windows belong on this screen.
-                
                 win.el.classList.remove('hidden');
-                windows.push(win); // Add to the visible list
+                windows.push(win);
             });
 
-            // 5. Retile the new set of visible windows
             tileWindows();
-
-            // 6. Update Taskbar
             updateTaskbar();
 
-            // 7. Focus the terminal (w1) if on workspace 1, or the first window on others
             if (windows.length > 0) {
                  focusWindow(windows[0].el);
             } else {
@@ -1008,8 +988,6 @@ bindsym $mod+Return exec i3-sensible-terminal
             });
         }
 
-
-        // --- Window Management and Drag/Drop ---
         function handleWindowControl(e, windowEl) {
             const action = e.target.getAttribute('data-action');
             const win = allWindows[windowEl.id];
@@ -1019,8 +997,6 @@ bindsym $mod+Return exec i3-sensible-terminal
 
             switch (action) {
                 case 'close':
-                    // Note: In i3, windows aren't truly 'closed' unless the app exits, 
-                    // but here we just hide them and remove them from the visible list.
                     windowEl.classList.add('hidden');
                     windows = windows.filter(w => w.el.id !== windowEl.id); 
                     focusedWindow = windows.length > 0 ? windows[0].el : null;
@@ -1034,19 +1010,9 @@ bindsym $mod+Return exec i3-sensible-terminal
                 case 'toggle-floating':
                     win.isFloating = !win.isFloating;
                     
-                    // Temporarily remove transition for immediate visual change
                     windowEl.classList.add('no-transition');
                     
                     if (win.isFloating) {
-                        // Use lastMetrics (which is currently the tiled position) to calculate size
-                        const currentMetrics = { 
-                            width: windowEl.offsetWidth, 
-                            height: windowEl.offsetHeight,
-                            left: windowEl.offsetLeft,
-                            top: windowEl.offsetTop
-                        };
-                        
-                        // Calculate a new centered floating position
                         const floatW = Math.max(desktopEl.clientWidth * 0.5, 400);
                         const floatH = Math.max(desktopEl.clientHeight * 0.6, 300);
                         const floatL = (desktopEl.clientWidth - floatW) / 2;
@@ -1055,16 +1021,14 @@ bindsym $mod+Return exec i3-sensible-terminal
                         applyMetrics(windowEl, { left: floatL, top: floatT, width: floatW, height: floatH });
                         focusWindow(windowEl); 
                     } else {
-                        // Return to the last calculated tiled position
                         const metrics = calculateTiledMetrics(win.config.ratio);
                         applyMetrics(windowEl, metrics);
                         win.lastMetrics = metrics;
                     }
                     
-                    // Restore transition after a small timeout
                     setTimeout(() => {
                         windowEl.classList.remove('no-transition');
-                        saveState(); // Save state after transition is done (or immediately)
+                        saveState(); 
                     }, 10);
                     break;
             }
@@ -1077,16 +1041,13 @@ bindsym $mod+Return exec i3-sensible-terminal
             const windowEl = headerEl.closest('.i3-window');
             const win = allWindows[windowEl.id];
 
-            // Only allow drag on floating windows
             if (!win || !win.isFloating) return; 
             
             focusWindow(windowEl);
             isDragging = true;
             
-            // Disable transitions during drag for smoothness
             windowEl.classList.add('no-transition');
             
-            // Calculate initial drag offset relative to the window
             dragOffsetX = e.clientX - windowEl.offsetLeft;
             dragOffsetY = e.clientY - windowEl.offsetTop;
 
@@ -1100,7 +1061,6 @@ bindsym $mod+Return exec i3-sensible-terminal
         function drag(e) {
             if (!isDragging || !focusedWindow) return;
 
-            // Only allow drag if the focused window is floating
             const win = allWindows[focusedWindow.id];
             if (!win || !win.isFloating) return;
 
@@ -1110,14 +1070,12 @@ bindsym $mod+Return exec i3-sensible-terminal
             const maxLeft = desktopEl.clientWidth - focusedWindow.offsetWidth - GAP_SIZE;
             const maxTop = desktopEl.clientHeight - focusedWindow.offsetHeight - GAP_SIZE;
 
-            // Clamp positions to stay within bounds (with a small gap)
             newX = Math.max(GAP_SIZE, Math.min(newX, maxLeft));
             newY = Math.max(GAP_SIZE, Math.min(newY, maxTop));
             
             focusedWindow.style.left = `${newX}px`;
             focusedWindow.style.top = `${newY}px`;
 
-            // Update lastMetrics live during drag
             win.lastMetrics.left = newX;
             win.lastMetrics.top = newY;
         }
@@ -1127,7 +1085,6 @@ bindsym $mod+Return exec i3-sensible-terminal
 
             isDragging = false;
             
-            // Re-enable transitions after drag ends
             focusedWindow.classList.remove('no-transition');
             
             focusedWindow.style.cursor = 'default';
@@ -1136,14 +1093,12 @@ bindsym $mod+Return exec i3-sensible-terminal
             document.removeEventListener('mousemove', drag);
             document.removeEventListener('mouseup', endDrag);
             
-            // Save final dragged position
             saveState();
         }
 
         // --- Initialization ---
 
         function initToneJs() {
-            // Setup a simple synth for feedback
             successSynth = new Tone.Synth({
                 oscillator: { type: "triangle" },
                 envelope: {
@@ -1155,52 +1110,66 @@ bindsym $mod+Return exec i3-sensible-terminal
             }).toDestination();
         }
 
-        /** Main initialization function, called after Firebase Auth is ready. */
-        window.initDesktop = async function() {
-            // 1. Initialize Tone.js for sounds
-            initToneJs();
+        async function handlePasswordSubmit(e) {
+            e.preventDefault();
+            const passwordInput = document.getElementById('encryption-password');
+            const password = passwordInput.value;
+            const errorEl = document.getElementById('password-error');
+            
+            if (!password) {
+                errorEl.textContent = "Password cannot be empty.";
+                errorEl.classList.remove('hidden');
+                return;
+            }
 
-            // 2. Setup continuous time updates
+            // 1. Attempt to load and decrypt state
+            const loadedStates = await loadState(password);
+            
+            if (loadedStates === false) {
+                // Decryption failed
+                errorEl.textContent = "Decryption failed. Please check your password.";
+                errorEl.classList.remove('hidden');
+                passwordInput.value = ''; // Clear password
+                return;
+            }
+
+            // 2. Successful load or new state initialization
+            document.getElementById('password-modal').close();
+            errorEl.classList.add('hidden');
+            
+            // 3. Continue desktop initialization
+            window.initDesktop(loadedStates || {});
+        }
+
+        /** Main initialization function, called after successful password entry. */
+        window.initDesktop = function(loadedStates) {
+            initToneJs();
             setInterval(updateDateTime, 1000);
             updateDateTime();
             
-            let loadedStates = {};
-            if (window.userId) {
-                 // 3. Load persistent state from Firestore
-                loadedStates = await loadState() || {};
-            }
-            
-            // 4. Determine which workspace to start on (default 1)
             let initialWorkspace = '1';
             
             // 5. Create all windows configured in WORKSPACES, applying loaded state
-            // We need to iterate over ALL configs to ensure allWindow is populated
             Object.values(WORKSPACES).flat().forEach(config => {
                 const savedState = loadedStates[config.id] || {};
                 
-                // If window ID already exists in allWindows (due to the way WORKSPACES is structured), skip.
                 if (allWindows[config.id]) return;
 
                 const win = createWindowEl(config, savedState);
                 allWindows[config.id] = win;
             });
             
-            // 6. Switch to the initial workspace
             switchWorkspace(initialWorkspace);
 
-            // 7. Set up listeners for window resize and workspace bar
             window.addEventListener('resize', tileWindows);
             initWorkspaceListeners();
 
-            // 8. Initial tile layout
             tileWindows();
-            
-            // 9. Initial Taskbar update
             updateTaskbar();
         }
         
-        // NOTE: Firebase initialization and calling initDesktop is handled 
-        // in the <script type="module"> block above.
+        // Attach event listener to the password form
+        document.getElementById('password-form').addEventListener('submit', handlePasswordSubmit);
         
     </script>
 </body>
