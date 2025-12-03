@@ -43,14 +43,16 @@
         // Asynchronous Authentication Function
         window.initFirebaseAuth = async () => {
             try {
-                if (window.__initial_auth_token) {
-                    await signInWithCustomToken(window.auth, window.__initial_auth_token);
-                } else {
-                    await signInAnonymously(window.auth);
+                if (window.auth) {
+                    if (window.__initial_auth_token) {
+                        await signInWithCustomToken(window.auth, window.__initial_auth_token);
+                    } else {
+                        await signInAnonymously(window.auth);
+                    }
+                    // Once authenticated, get the user ID
+                    window.userId = window.auth.currentUser.uid;
+                    console.log("Firebase Auth successful. User ID:", window.userId);
                 }
-                // Once authenticated, get the user ID
-                window.userId = window.auth.currentUser.uid;
-                console.log("Firebase Auth successful. User ID:", window.userId);
             } catch (error) {
                 console.error("Firebase Authentication Error:", error);
                 // Fallback to a random ID if auth fails, but persistence won't work correctly.
@@ -100,6 +102,54 @@
                 transparent
             );
             background-size: 20px 20px;
+        }
+        
+        /* Desktop area must account for the top bar (32px) and the bottom taskbar (32px) */
+        #desktop {
+            position: relative;
+            width: 100vw;
+            height: calc(100vh - 64px); /* 32px (top bar) + 32px (taskbar) */
+        }
+
+        /* Taskbar Styles */
+        #taskbar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 32px;
+            background-color: #171717;
+            border-top: 2px solid var(--arch-cyan);
+            display: flex;
+            align-items: center;
+            padding: 0 8px;
+            z-index: 1000;
+        }
+
+        .taskbar-item {
+            display: flex;
+            align-items: center;
+            height: 24px;
+            padding: 0 8px;
+            margin-right: 6px;
+            background-color: #2d2d2d;
+            color: #f3f4f6;
+            font-size: 0.75rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s, box-shadow 0.2s;
+            border: 1px solid transparent;
+        }
+
+        .taskbar-item:hover {
+            background-color: #3f3f46;
+        }
+        
+        .taskbar-item.active {
+            background-color: var(--arch-cyan);
+            color: #171717;
+            font-weight: 600;
+            box-shadow: 0 0 8px rgba(0, 189, 212, 0.5);
         }
         
         /* Styling for the i3-gaps inspired windows */
@@ -203,11 +253,6 @@
         }
 
         /* Initial Tiling */
-        #desktop {
-            position: relative;
-            width: 100vw;
-            height: calc(100vh - 32px); 
-        }
         
         /* CMatrix Canvas ensures no padding/margin from window content */
         .cmatrix-container {
@@ -252,11 +297,16 @@
     <div id="desktop" class="relative">
         <!-- Windows will be injected here by JavaScript -->
     </div>
+    
+    <!-- Taskbar -->
+    <div id="taskbar">
+        <!-- Taskbar items will be injected here -->
+    </div>
 
     <script>
         // --- Gemini API Configuration ---
         // IMPORTANT: REPLACE "YOUR_API_KEY_HERE" WITH your actual Gemini API Key Key string.
-        const API_KEY = "YOUR_API_KEY_HERE"; 
+        const API_KEY = ""; // Using an empty string for Canvas environment
         const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${API_KEY}`;
         
         // System instruction to define the persona of the shell
@@ -324,6 +374,7 @@ bindsym $mod+Return exec i3-sensible-terminal
         // Elements
         const desktopEl = document.getElementById('desktop');
         const datetimeEl = document.getElementById('datetime-display');
+        const taskbarEl = document.getElementById('taskbar');
         const getWorkspaceBar = () => document.getElementById('workspace-bar');
 
         // --- Core Utility Functions (Including API and Tiling) ---
@@ -356,11 +407,22 @@ bindsym $mod+Return exec i3-sensible-terminal
             // Transform allWindows into a simpler, storable format
             Object.keys(allWindows).forEach(winId => {
                 const win = allWindows[winId];
+                
+                // Update current metrics one last time before saving
+                if (win.el) {
+                    win.lastMetrics = { 
+                        width: win.el.offsetWidth, 
+                        height: win.el.offsetHeight,
+                        left: win.el.offsetLeft,
+                        top: win.el.offsetTop
+                    };
+                }
+
                 dataToSave[winId] = {
                     content: win.config.content || '',
                     isFloating: win.isFloating,
                     lastMetrics: win.lastMetrics,
-                    currentWorkspace: win.config.currentWorkspace || '1' // Track which workspace a window belongs to
+                    currentWorkspace: win.config.currentWorkspace || '1'
                 };
             });
             
@@ -396,7 +458,8 @@ bindsym $mod+Return exec i3-sensible-terminal
             for (let i = 0; i < maxRetries; i++) {
                 // If API_KEY is missing, immediately fail with a helpful error
                 if (API_KEY === "YOUR_API_KEY_HERE" || !API_KEY) {
-                    throw new Error("API Key Missing. Please insert your key in the HTML code.");
+                    // This is for local testing. In Canvas, the key is provided dynamically.
+                    // return new Response(JSON.stringify({ error: "API Key Missing" }), { status: 500 });
                 }
 
                 try {
@@ -477,7 +540,7 @@ bindsym $mod+Return exec i3-sensible-terminal
         /** Rerenders all visible windows based on the current desktop size. */
         function tileWindows() {
             windows.forEach(win => {
-                // Only re-tile if the window is NOT floating
+                // Only re-tile if the window is NOT floating and not hidden
                 if (!win.el.classList.contains('hidden') && !win.isFloating) {
                     const metrics = calculateTiledMetrics(win.config.ratio);
                     applyMetrics(win.el, metrics);
@@ -491,7 +554,7 @@ bindsym $mod+Return exec i3-sensible-terminal
                             // Adjusting for window content padding (8px on each side = 16px)
                             canvas.width = metrics.width - 16; 
                             // Header (32px) + Content top padding (8px) + Content bottom padding (8px)
-                            canvas.height = metrics.height - (32 + 16); 
+                            canvas.height = metrics.height - 48; // 32 (header) + 8 (top pad) + 8 (bottom pad) 
                         }
                     }
                 }
@@ -501,8 +564,15 @@ bindsym $mod+Return exec i3-sensible-terminal
         /** Sets the focus state for a window and handles content saving/loading. */
         function focusWindow(windowEl) {
             // 1. Save content/state of the previously focused window
-            if (focusedWindow) {
+            if (focusedWindow && focusedWindow !== windowEl) {
                 focusedWindow.classList.remove('focused');
+                
+                // Update taskbar button state for previously focused window
+                const prevTaskbarItem = taskbarEl.querySelector(`[data-window-id="${focusedWindow.id}"]`);
+                if (prevTaskbarItem) {
+                    prevTaskbarItem.classList.remove('active');
+                }
+
                 const prevWinData = allWindows[focusedWindow.id];
 
                 // Save content for text windows
@@ -512,7 +582,7 @@ bindsym $mod+Return exec i3-sensible-terminal
                         prevWinData.config.content = textarea.value;
                     }
                 }
-                // Save window position/size (used for floating mode)
+                // Save window position/size 
                 prevWinData.lastMetrics = { 
                     width: focusedWindow.offsetWidth, 
                     height: focusedWindow.offsetHeight,
@@ -527,6 +597,12 @@ bindsym $mod+Return exec i3-sensible-terminal
             // 2. Set focus on the new window
             focusedWindow = windowEl;
             focusedWindow.classList.add('focused');
+
+            // Update taskbar button state for newly focused window
+            const taskbarItem = taskbarEl.querySelector(`[data-window-id="${windowEl.id}"]`);
+            if (taskbarItem) {
+                taskbarItem.classList.add('active');
+            }
             
             // Bring to front
             let maxZIndex = 100;
@@ -566,8 +642,8 @@ bindsym $mod+Return exec i3-sensible-terminal
             function initializeMatrix() {
                 const container = canvas.closest('.window-content');
                 // Use offsetWidth/Height as the content div has padding
-                canvas.width = container.offsetWidth; 
-                canvas.height = container.offsetHeight; 
+                canvas.width = container.offsetWidth - 16; 
+                canvas.height = container.offsetHeight - 16; 
 
                 columns = Math.floor(canvas.width / fontSize);
                 drops = [];
@@ -600,7 +676,7 @@ bindsym $mod+Return exec i3-sensible-terminal
 
                     ctx.fillText(text, x, y);
 
-                    if (y > canvas.height && Math.random() > 0.975) {
+                    if (y * 0.9 > canvas.height && Math.random() > 0.975) {
                         drops[i] = 0;
                     }
 
@@ -741,6 +817,37 @@ bindsym $mod+Return exec i3-sensible-terminal
                     return `<div class="p-2">Default window content.</div>`;
             }
         }
+        
+        // --- Taskbar Management ---
+        function updateTaskbar() {
+            taskbarEl.innerHTML = ''; // Clear taskbar
+            
+            windows.forEach(win => {
+                const button = document.createElement('div');
+                button.id = `taskbar-item-${win.el.id}`;
+                button.classList.add('taskbar-item');
+                button.textContent = win.config.title;
+                button.setAttribute('data-window-id', win.el.id);
+                
+                if (win.el === focusedWindow) {
+                    button.classList.add('active');
+                }
+                
+                button.addEventListener('click', () => {
+                    restoreWindow(win.el);
+                });
+                taskbarEl.appendChild(button);
+            });
+        }
+        
+        /** Restores a minimized or inactive window. */
+        function restoreWindow(windowEl) {
+            if (windowEl.classList.contains('hidden')) {
+                windowEl.classList.remove('hidden');
+            }
+            focusWindow(windowEl);
+            tileWindows(); // Retile in case it was tiled and screen resized
+        }
 
         /** Creates the HTML element for a window. */
         function createWindowEl(config, savedState = {}) {
@@ -805,8 +912,10 @@ bindsym $mod+Return exec i3-sensible-terminal
             windowEl.addEventListener('mousedown', (e) => {
                 focusWindow(windowEl);
             });
-            // Also need to save state when window is resized via dragging
+            
+            // Save state on end of resize
             windowEl.addEventListener('mouseup', saveState); 
+            
             windowEl.querySelector('.window-header').addEventListener('mousedown', startDrag);
             windowEl.querySelectorAll('.window-controls button').forEach(button => {
                 button.addEventListener('click', (e) => handleWindowControl(e, windowEl));
@@ -868,16 +977,20 @@ bindsym $mod+Return exec i3-sensible-terminal
                 } 
                 
                 // Only show windows configured for the current workspace
-                if (win.config.currentWorkspace === targetId) {
-                    win.el.classList.remove('hidden');
-                    windows.push(win); // Add to the visible list
-                }
+                // NOTE: We don't check win.config.currentWorkspace as windows are created on workspace 1 initially.
+                // Instead, we rely on the WORKSPACES map for which windows belong on this screen.
+                
+                win.el.classList.remove('hidden');
+                windows.push(win); // Add to the visible list
             });
 
             // 5. Retile the new set of visible windows
             tileWindows();
 
-            // 6. Focus the terminal (w1) if on workspace 1, or the first window on others
+            // 6. Update Taskbar
+            updateTaskbar();
+
+            // 7. Focus the terminal (w1) if on workspace 1, or the first window on others
             if (windows.length > 0) {
                  focusWindow(windows[0].el);
             } else {
@@ -906,12 +1019,17 @@ bindsym $mod+Return exec i3-sensible-terminal
 
             switch (action) {
                 case 'close':
+                    // Note: In i3, windows aren't truly 'closed' unless the app exits, 
+                    // but here we just hide them and remove them from the visible list.
                     windowEl.classList.add('hidden');
-                    // Remove from visible list so it's not tiled
                     windows = windows.filter(w => w.el.id !== windowEl.id); 
+                    focusedWindow = windows.length > 0 ? windows[0].el : null;
+                    if(focusedWindow) focusWindow(focusedWindow);
                     break;
                 case 'minimize':
                     windowEl.classList.add('hidden');
+                    focusedWindow = windows.filter(w => !w.el.classList.contains('hidden')).map(w => w.el)[0] || null;
+                    if(focusedWindow) focusWindow(focusedWindow);
                     break;
                 case 'toggle-floating':
                     win.isFloating = !win.isFloating;
@@ -920,8 +1038,8 @@ bindsym $mod+Return exec i3-sensible-terminal
                     windowEl.classList.add('no-transition');
                     
                     if (win.isFloating) {
-                        // Save current tiled position as lastMetrics before floating
-                        win.lastMetrics = { 
+                        // Use lastMetrics (which is currently the tiled position) to calculate size
+                        const currentMetrics = { 
                             width: windowEl.offsetWidth, 
                             height: windowEl.offsetHeight,
                             left: windowEl.offsetLeft,
@@ -950,6 +1068,7 @@ bindsym $mod+Return exec i3-sensible-terminal
                     }, 10);
                     break;
             }
+            updateTaskbar();
             saveState();
         }
 
@@ -958,7 +1077,8 @@ bindsym $mod+Return exec i3-sensible-terminal
             const windowEl = headerEl.closest('.i3-window');
             const win = allWindows[windowEl.id];
 
-            if (!win || !win.isFloating) return; // Only allow drag on floating windows
+            // Only allow drag on floating windows
+            if (!win || !win.isFloating) return; 
             
             focusWindow(windowEl);
             isDragging = true;
@@ -966,6 +1086,7 @@ bindsym $mod+Return exec i3-sensible-terminal
             // Disable transitions during drag for smoothness
             windowEl.classList.add('no-transition');
             
+            // Calculate initial drag offset relative to the window
             dragOffsetX = e.clientX - windowEl.offsetLeft;
             dragOffsetY = e.clientY - windowEl.offsetTop;
 
@@ -979,23 +1100,26 @@ bindsym $mod+Return exec i3-sensible-terminal
         function drag(e) {
             if (!isDragging || !focusedWindow) return;
 
+            // Only allow drag if the focused window is floating
+            const win = allWindows[focusedWindow.id];
+            if (!win || !win.isFloating) return;
+
             let newX = e.clientX - dragOffsetX;
             let newY = e.clientY - dragOffsetY;
 
             const maxLeft = desktopEl.clientWidth - focusedWindow.offsetWidth - GAP_SIZE;
             const maxTop = desktopEl.clientHeight - focusedWindow.offsetHeight - GAP_SIZE;
 
+            // Clamp positions to stay within bounds (with a small gap)
             newX = Math.max(GAP_SIZE, Math.min(newX, maxLeft));
             newY = Math.max(GAP_SIZE, Math.min(newY, maxTop));
             
             focusedWindow.style.left = `${newX}px`;
             focusedWindow.style.top = `${newY}px`;
 
-            const win = allWindows[focusedWindow.id];
-            if(win) {
-                win.lastMetrics.left = newX;
-                win.lastMetrics.top = newY;
-            }
+            // Update lastMetrics live during drag
+            win.lastMetrics.left = newX;
+            win.lastMetrics.top = newY;
         }
 
         function endDrag() {
@@ -1048,21 +1172,17 @@ bindsym $mod+Return exec i3-sensible-terminal
             
             // 4. Determine which workspace to start on (default 1)
             let initialWorkspace = '1';
-
+            
             // 5. Create all windows configured in WORKSPACES, applying loaded state
-            Object.keys(WORKSPACES).forEach(workspaceId => {
-                WORKSPACES[workspaceId].forEach(config => {
-                    const savedState = loadedStates[config.id] || {};
-                    
-                    // If window has saved state, update its current workspace tracker
-                    if (savedState.currentWorkspace) {
-                        config.currentWorkspace = savedState.currentWorkspace;
-                        if (savedState.currentWorkspace !== workspaceId) return; // Skip creation if it belongs elsewhere
-                    }
+            // We need to iterate over ALL configs to ensure allWindow is populated
+            Object.values(WORKSPACES).flat().forEach(config => {
+                const savedState = loadedStates[config.id] || {};
+                
+                // If window ID already exists in allWindows (due to the way WORKSPACES is structured), skip.
+                if (allWindows[config.id]) return;
 
-                    const win = createWindowEl(config, savedState);
-                    allWindows[config.id] = win;
-                });
+                const win = createWindowEl(config, savedState);
+                allWindows[config.id] = win;
             });
             
             // 6. Switch to the initial workspace
@@ -1074,6 +1194,9 @@ bindsym $mod+Return exec i3-sensible-terminal
 
             // 8. Initial tile layout
             tileWindows();
+            
+            // 9. Initial Taskbar update
+            updateTaskbar();
         }
         
         // NOTE: Firebase initialization and calling initDesktop is handled 
