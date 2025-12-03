@@ -8,7 +8,1229 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght400&display=swap" rel="stylesheet">
     
+    <!-- Tone.js CDN for sound effects --><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GoreckiOS - Web Desktop Simulator (Encrypted)</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght400&display=swap" rel="stylesheet">
+    
     <!-- Tone.js CDN for sound effects -->
+    <script src="https://unpkg.com/tone@148/build/Tone.js"></script>
+    
+    <!-- Firebase SDK Imports (Module style for modern JS) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global Firebase Variables (provided by the environment)
+        window.__app_id = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        window.firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        window.__initial_auth_token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Expose Firebase services globally
+        if (Object.keys(window.firebaseConfig).length > 0) {
+            const app = initializeApp(window.firebaseConfig);
+            window.db = getFirestore(app);
+            window.auth = getAuth(app);
+            window.firestoreDoc = doc;
+            window.firestoreSetDoc = setDoc;
+            window.firestoreGetDoc = getDoc;
+            setLogLevel('Debug'); 
+        } else {
+            console.error("Firebase config is missing. Persistence will not work.");
+        }
+        
+        // Asynchronous Authentication Function
+        window.initFirebaseAuth = async () => {
+            try {
+                if (window.auth) {
+                    if (window.__initial_auth_token) {
+                        await signInWithCustomToken(window.auth, window.__initial_auth_token);
+                    } else {
+                        await signInAnonymously(window.auth);
+                    }
+                    window.userId = window.auth.currentUser.uid;
+                    console.log("Firebase Auth successful. User ID:", window.userId);
+                }
+            } catch (error) {
+                console.error("Firebase Authentication Error:", error);
+                window.userId = crypto.randomUUID(); 
+            }
+        };
+
+        // Start Auth, then immediately init desktop with the hardcoded password
+        window.initFirebaseAuth().then(async () => {
+            const MASTER_PASSWORD = "GoreckiOS-Master-Key-42"; // Hardcoded master password
+            
+            const loadedStates = await window.loadState(MASTER_PASSWORD);
+            
+            if (loadedStates === false) {
+                 // Decryption failed with the hardcoded key. This means the stored salt is incorrect or the data is corrupted. 
+                 // We must re-initialize the encryption state with a new salt.
+                 console.error("Decryption failed with master key. Re-initializing encryption state.");
+                 window.encryptionSalt = crypto.getRandomValues(new Uint8Array(16));
+                 window.encryptionKey = await window.deriveKey(MASTER_PASSWORD, window.encryptionSalt);
+                 window.initDesktop({}); // Start with empty desktop
+            } else {
+                // Successful load or new state initialization
+                window.initDesktop(loadedStates || {});
+            }
+        }); 
+
+    </script>
+    
+    <style>
+        /* Custom Configuration for Tailwind */
+        :root {
+            --arch-cyan: #00bcd4; /* A vibrant teal/cyan */
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden; 
+            margin: 0;
+            padding: 0;
+        }
+        
+        .arch-bar {
+            background-color: #171717; 
+            color: #f3f4f6;
+            border-bottom: 2px solid var(--arch-cyan);
+            height: 32px;
+            user-select: none;
+        }
+
+        .desktop-bg {
+            background-color: #1a1a1a; 
+            background-image: linear-gradient(
+                -45deg, 
+                #212121 25%, 
+                transparent 25%, 
+                transparent 50%, 
+                #212121 50%, 
+                #212121 75%, 
+                transparent 75%, 
+                transparent
+            );
+            background-size: 20px 20px;
+        }
+        
+        #desktop {
+            position: relative;
+            width: 100vw;
+            height: calc(100vh - 64px); 
+        }
+
+        #taskbar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 32px;
+            background-color: #171717;
+            border-top: 2px solid var(--arch-cyan);
+            display: flex;
+            align-items: center;
+            padding: 0 8px;
+            z-index: 1000;
+        }
+
+        .taskbar-item {
+            display: flex;
+            align-items: center;
+            height: 24px;
+            padding: 0 8px;
+            margin-right: 6px;
+            background-color: #2d2d2d;
+            color: #f3f4f6;
+            font-size: 0.75rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s, box-shadow 0.2s;
+            border: 1px solid transparent;
+        }
+
+        .taskbar-item:hover {
+            background-color: #3f3f46;
+        }
+        
+        .taskbar-item.active {
+            background-color: var(--arch-cyan);
+            color: #171717;
+            font-weight: 600;
+            box-shadow: 0 0 8px rgba(0, 189, 212, 0.5);
+        }
+        
+        .i3-window {
+            position: absolute; 
+            border: 2px solid #333;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            transition: all 0.3s ease-out; 
+            min-width: 200px;
+            min-height: 100px;
+            display: flex;
+            flex-direction: column;
+            resize: both; 
+            overflow: hidden; 
+        }
+        
+        .i3-window.no-transition {
+            transition: none !important;
+        }
+        
+        .window-header {
+            cursor: grab;
+            background-color: #262626; 
+            border-bottom: 1px solid #3f3f46;
+            padding: 4px 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .window-title {
+            color: var(--arch-cyan);
+            font-weight: 600;
+            font-size: 0.8rem;
+        }
+
+        .window-controls > button {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            margin-left: 4px;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+
+        .window-controls > button:hover {
+            opacity: 1;
+        }
+
+        .close-btn { background-color: #ef4444; } 
+        .minimize-btn { background-color: #f59e0b; } 
+        .maximize-btn { background-color: #10b981; } 
+
+        .window-content {
+            background-color: #212121; 
+            flex-grow: 1;
+            color: #d1d5db;
+            overflow-y: auto; 
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            display: flex;
+            flex-direction: column;
+            padding: 8px;
+        }
+
+        #terminal-output {
+            flex-grow: 1;
+            white-space: pre-wrap; 
+            overflow-y: auto;
+            padding-bottom: 12px;
+        }
+
+        #terminal-input-container {
+            display: flex;
+            align-items: center;
+            padding-top: 4px;
+        }
+
+        #terminal-input {
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #f3f4f6;
+            flex-grow: 1;
+            margin-left: 4px;
+            caret-color: var(--arch-cyan);
+        }
+
+        .i3-window.focused {
+            border-color: var(--arch-cyan);
+            box-shadow: 0 0 15px rgba(0, 189, 212, 0.7); 
+            z-index: 100; 
+        }
+        
+        .prompt {
+            color: #93c5fd; 
+        }
+
+        .cmatrix-container {
+            padding: 0;
+            margin: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        #matrix-canvas {
+            display: block;
+            background-color: #0a0a0a;
+        }
+        
+        #config-textarea {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+
+<body class="desktop-bg">
+
+    <!-- i3-status Bar Simulation -->
+    <div class="arch-bar flex justify-between items-center px-4 shadow-lg z-20">
+        <!-- Workspace indicators -->
+        <div id="workspace-bar" class="flex space-x-2 text-xs">
+            <span class="workspace-btn px-2 py-0.5 rounded-sm bg-cyan-600 text-gray-900 font-bold cursor-pointer" data-workspace-id="1">1</span>
+            <span class="workspace-btn px-2 py-0.5 rounded-sm hover:bg-gray-700 transition duration-150 cursor-pointer" data-workspace-id="2">2</span>
+            <span class="workspace-btn px-2 py-0.5 rounded-sm hover:bg-gray-700 transition duration-150 cursor-pointer" data-workspace-id="3">3</span>
+            <span class="workspace-btn px-2 py-0.5 rounded-sm hover:bg-gray-700 transition duration-150 cursor-pointer" data-workspace-id="4">4</span>
+        </div>
+
+        <!-- System Status (Minimal) -->
+        <div class="flex space-x-4 text-xs font-mono">
+            <span id="datetime-display" class="text-cyan-400 font-semibold"></span>
+        </div>
+    </div>
+
+    <!-- Desktop Area -->
+    <div id="desktop" class="relative">
+        <!-- Windows will be injected here by JavaScript -->
+    </div>
+    
+    <!-- Taskbar -->
+    <div id="taskbar">
+        <!-- Taskbar items will be injected here -->
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const MASTER_PASSWORD = "GoreckiOS-Master-Key-42"; 
+        
+        // --- Gemini API Configuration ---
+        const API_KEY = ""; 
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${API_KEY}`;
+        const SHELL_PROMPT = `You are a sarcastic, witty, and extremely knowledgeable Arch Linux shell assistant named 'GoreckiOS'. Your responses must mimic Linux terminal output.
+        
+        1. Format your output as simple plain text, simulating a terminal response.
+        2. NEVER use markdown formatting like **bold** or *italics'.
+        3. Do not include the user's prompt or the shell prompt in your response.
+        4. If asked a command that doesn't exist (like 'run_app'), give a witty error message, maybe referencing 'pacman' or 'AUR'.
+        5. Answer questions about Linux, coding, configuration, or general knowledge with a superior, Arch-user attitude.
+        6. Keep responses concise, typically 2-4 lines of output.`;
+
+        // --- Encryption Global State ---
+        let encryptionKey = null; // Stored key derived from password
+        let encryptionSalt = null; // Salt used for key derivation (stored in Firestore)
+
+        // --- Desktop Environment Configuration ---
+        const GAP_SIZE = 12; 
+        let configContent = `# i3-gaps config file (Encrypted Persistence enabled!)
+
+set $mod Mod4
+
+# gaps
+gaps inner 10
+gaps outer 5
+
+# Start terminal
+bindsym $mod+Return exec i3-sensible-terminal
+
+# Set background:
+# exec_always feh --bg-fill /path/to/wallpaper.jpg
+
+# End of file`;
+        
+        const WORKSPACES = {
+            '1': [
+                { id: 'w1', title: 'Terminal - bash (GoreckiOS Shell)', type: 'terminal', ratio: [0, 0, 70, 100], isFloating: false, content: null }, 
+                { id: 'w2', title: 'neovim /etc/config.txt', type: 'text', ratio: [70, 0, 30, 50], isFloating: false, content: null },
+                { id: 'w3', title: 'Background Process: Matrix', type: 'cmatrix-window', ratio: [70, 50, 30, 50], isFloating: false, content: null } 
+            ],
+            '2': [
+                { id: 'w4', title: 'Project Alpha - Documentation', type: 'text', ratio: [10, 10, 80, 80], isFloating: true, content: 'This is a floating document on Workspace 2. Edits here are saved.' } 
+            ],
+            '3': [], 
+            '4': []  
+        };
+
+        // State Management
+        let allWindows = {};
+        let windows = [];
+        let focusedWindow = null;
+        let currentWorkspace = '1';
+        let isDragging = false;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+        let terminalHistory = []; 
+        let successSynth = null; 
+        
+        // Elements
+        const desktopEl = document.getElementById('desktop');
+        const datetimeEl = document.getElementById('datetime-display');
+        const taskbarEl = document.getElementById('taskbar');
+        const getWorkspaceBar = () => document.getElementById('workspace-bar');
+        
+        // --- Web Crypto Encryption/Decryption Functions ---
+
+        const ENCRYPTION_ALGO = 'AES-GCM';
+        const KEY_DERIVATION_ALGO = 'PBKDF2';
+        const ITERATIONS = 100000;
+        const KEY_LEN = 256;
+
+        /** Derives an encryption key from the password and salt. */
+        window.deriveKey = async function(password, salt) {
+            const enc = new TextEncoder();
+            const passwordBuffer = enc.encode(password);
+            
+            const baseKey = await crypto.subtle.importKey(
+                'raw',
+                passwordBuffer,
+                KEY_DERIVATION_ALGO,
+                false,
+                ['deriveKey']
+            );
+
+            return crypto.subtle.deriveKey(
+                {
+                    name: KEY_DERIVATION_ALGO,
+                    salt: salt,
+                    iterations: ITERATIONS,
+                    hash: 'SHA-256'
+                },
+                baseKey,
+                { name: ENCRYPTION_ALGO, length: KEY_LEN },
+                false,
+                ['encrypt', 'decrypt']
+            );
+        }
+
+        /** Encrypts data using the derived key. */
+        async function encryptState(data, key) {
+            const dataString = JSON.stringify(data);
+            const dataBuffer = new TextEncoder().encode(dataString);
+            
+            // Generate a random 12-byte IV (Initialization Vector) for AES-GCM
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+
+            const encryptedBuffer = await crypto.subtle.encrypt(
+                { name: ENCRYPTION_ALGO, iv: iv },
+                key,
+                dataBuffer
+            );
+
+            // Return IV and ciphertext (as base64 strings)
+            return {
+                iv: btoa(String.fromCharCode(...new Uint8Array(iv))),
+                ciphertext: btoa(String.fromCharCode(...new Uint8Array(encryptedBuffer)))
+            };
+        }
+
+        /** Decrypts data using the derived key. */
+        window.decryptState = async function(encryptedData, key) {
+            try {
+                const iv = Uint8Array.from(atob(encryptedData.iv), c => c.charCodeAt(0));
+                const ciphertext = Uint8Array.from(atob(encryptedData.ciphertext), c => c.charCodeAt(0));
+
+                const decryptedBuffer = await crypto.subtle.decrypt(
+                    { name: ENCRYPTION_ALGO, iv: iv },
+                    key,
+                    ciphertext
+                );
+                
+                const decryptedString = new TextDecoder().decode(decryptedBuffer);
+                return JSON.parse(decryptedString);
+
+            } catch (e) {
+                console.error("Decryption failed:", e);
+                return null; // Return null on decryption failure
+            }
+        }
+        
+        // --- Firestore Persistence Functions ---
+
+        /** Retrieves the Firestore document reference for desktop state. */
+        function getStateDocRef() {
+            if (!window.db || !window.userId || !window.firestoreDoc) return null;
+            return window.firestoreDoc(window.db, 'artifacts', window.__app_id, 'users', window.userId, 'desktop_state', 'config');
+        }
+
+        /** Saves the current application state to Firestore, encrypted. */
+        async function saveState() {
+            const stateDocRef = getStateDocRef();
+            if (!stateDocRef || !window.firestoreSetDoc || !encryptionKey) return;
+
+            // 1. Prepare data for storage: only store persistent fields
+            const dataToSave = {};
+            
+            Object.keys(allWindows).forEach(winId => {
+                const win = allWindows[winId];
+                
+                // Update current metrics one last time before saving
+                if (win.el) {
+                    win.lastMetrics = { 
+                        width: win.el.offsetWidth, 
+                        height: win.el.offsetHeight,
+                        left: win.el.offsetLeft,
+                        top: win.el.offsetTop,
+                        isHidden: win.el.classList.contains('hidden') // Save visibility state
+                    };
+                }
+
+                dataToSave[winId] = {
+                    content: win.config.content || '',
+                    isFloating: win.isFloating,
+                    lastMetrics: win.lastMetrics,
+                    currentWorkspace: win.config.currentWorkspace || '1'
+                };
+            });
+            
+            try {
+                const encrypted = await encryptState(dataToSave, encryptionKey);
+                
+                // Store the encrypted state along with the salt
+                await window.firestoreSetDoc(stateDocRef, {
+                    timestamp: new Date().toISOString(),
+                    salt: btoa(String.fromCharCode(...new Uint8Array(encryptionSalt))),
+                    encryptedState: encrypted
+                }, { merge: true });
+            } catch (error) {
+                console.error("Failed to save state to Firestore:", error);
+            }
+        }
+        
+        /** Loads the encrypted application state from Firestore and attempts decryption. */
+        window.loadState = async function(password) {
+            const stateDocRef = getStateDocRef();
+            if (!stateDocRef || !window.firestoreGetDoc) return null;
+
+            try {
+                const docSnap = await window.firestoreGetDoc(stateDocRef);
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    const b64Salt = data.salt;
+                    const encryptedData = data.encryptedState;
+                    
+                    if (!b64Salt || !encryptedData) {
+                         // Data exists but is not encrypted. Treat as a new state setup.
+                         // Initialize with a new salt and key
+                         encryptionSalt = crypto.getRandomValues(new Uint8Array(16));
+                         encryptionKey = await deriveKey(password, encryptionSalt);
+                         return {};
+                    }
+                    
+                    // 1. Convert Base64 Salt back to Uint8Array and store globally
+                    encryptionSalt = Uint8Array.from(atob(b64Salt), c => c.charCodeAt(0));
+                    
+                    // 2. Derive key using the provided password and stored salt
+                    encryptionKey = await deriveKey(password, encryptionSalt);
+
+                    // 3. Attempt decryption
+                    const decrypted = await decryptState(encryptedData, encryptionKey);
+                    
+                    if (decrypted) {
+                        return decrypted;
+                    } else {
+                        // Decryption failed (wrong password/corrupted data)
+                        return false; 
+                    }
+                } else {
+                    // Document does not exist. Initialize a new state.
+                    // Generate a new salt and key
+                    encryptionSalt = crypto.getRandomValues(new Uint8Array(16));
+                    encryptionKey = await deriveKey(password, encryptionSalt);
+                    return {}; // Empty object for new state
+                }
+            } catch (error) {
+                console.error("Failed to load or process state:", error);
+                return null; // General error
+            }
+        }
+
+        // --- Core Utility Functions ---
+        // (Sound, Tiling, Terminal, etc.)
+
+        function playSuccessTone() {
+            if (!successSynth) return;
+            successSynth.triggerAttackRelease("C4", "8n");
+        }
+        
+        function playFailureTone() {
+            if (!successSynth) return;
+            successSynth.triggerAttackRelease("C2", "8n");
+        }
+
+        function updateDateTime() {
+            const now = new Date();
+            const date = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            const time = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+            datetimeEl.textContent = `[${date} | ${time}]`;
+        }
+
+        function calculateTiledMetrics(ratio) {
+            const desktopWidth = desktopEl.clientWidth;
+            const desktopHeight = desktopEl.clientHeight;
+
+            const [ratioX, ratioY, ratioW, ratioH] = ratio;
+
+            let x = desktopWidth * (ratioX / 100);
+            let y = desktopHeight * (ratioY / 100);
+            let w = desktopWidth * (ratioW / 100);
+            let h = desktopHeight * (ratioH / 100);
+
+            // Apply Gaps
+            if (ratioX === 0) x += GAP_SIZE;
+            else x += (GAP_SIZE / 2);
+
+            if (ratioY === 0) y += GAP_SIZE;
+            else y += (GAP_SIZE / 2);
+
+            if (ratioX === 0 && ratioX + ratioW === 100) w -= (GAP_SIZE * 2); 
+            else if (ratioX === 0 || ratioX + ratioW === 100) w -= (GAP_SIZE * 1.5);
+            else w -= GAP_SIZE;
+
+            if (ratioY === 0 && ratioY + ratioH === 100) h -= (GAP_SIZE * 2); 
+            else if (ratioY === 0 || ratioY + ratioH === 100) h -= (GAP_SIZE * 1.5);
+            else h -= GAP_SIZE; 
+            
+            return {
+                left: x,
+                top: y,
+                width: Math.max(200, w),
+                height: Math.max(100, h)
+            };
+        }
+
+        function applyMetrics(windowEl, metrics) {
+            windowEl.style.left = `${metrics.left}px`;
+            windowEl.style.top = `${metrics.top}px`;
+            windowEl.style.width = `${metrics.width}px`;
+            windowEl.style.height = `${metrics.height}px`;
+        }
+
+        function tileWindows() {
+            windows.forEach(win => {
+                if (!win.el.classList.contains('hidden') && !win.isFloating) {
+                    const metrics = calculateTiledMetrics(win.config.ratio);
+                    applyMetrics(win.el, metrics);
+                    win.lastMetrics = metrics;
+                    
+                    if (win.config.type === 'cmatrix-window') {
+                        const canvas = win.el.querySelector('#matrix-canvas');
+                        if (canvas) {
+                            // Account for padding (16px total) and header (32px approx)
+                            canvas.width = win.el.offsetWidth - 16; 
+                            canvas.height = win.el.offsetHeight - win.el.querySelector('.window-header').offsetHeight - 16;
+                        }
+                    }
+                }
+            });
+        }
+
+        function focusWindow(windowEl) {
+            if (focusedWindow && focusedWindow !== windowEl) {
+                focusedWindow.classList.remove('focused');
+                
+                const prevTaskbarItem = taskbarEl.querySelector(`[data-window-id="${focusedWindow.id}"]`);
+                if (prevTaskbarItem) {
+                    prevTaskbarItem.classList.remove('active');
+                }
+
+                const prevWinData = allWindows[focusedWindow.id];
+
+                if (prevWinData && prevWinData.config.type === 'text') {
+                    const textarea = focusedWindow.querySelector('#config-textarea');
+                    if (textarea) {
+                        prevWinData.config.content = textarea.value;
+                    }
+                }
+                prevWinData.lastMetrics = { 
+                    width: focusedWindow.offsetWidth, 
+                    height: focusedWindow.offsetHeight,
+                    left: focusedWindow.offsetLeft,
+                    top: focusedWindow.offsetTop,
+                    isHidden: focusedWindow.classList.contains('hidden')
+                };
+                
+                saveState();
+            }
+            
+            focusedWindow = windowEl;
+            focusedWindow.classList.add('focused');
+
+            const taskbarItem = taskbarEl.querySelector(`[data-window-id="${windowEl.id}"]`);
+            if (taskbarItem) {
+                taskbarItem.classList.add('active');
+            }
+            
+            let maxZIndex = 100;
+            document.querySelectorAll('.i3-window:not(.focused)').forEach(el => {
+                maxZIndex = Math.max(maxZIndex, parseInt(el.style.zIndex || 0));
+            });
+            windowEl.style.zIndex = maxZIndex + 1;
+            
+            const winData = allWindows[windowEl.id];
+            
+            if (winData.config.type === 'terminal') {
+                getTerminalElements()?.input?.focus();
+            } else if (winData.config.type === 'text') {
+                const textarea = windowEl.querySelector('#config-textarea');
+                if (textarea) {
+                    textarea.value = winData.config.content || ''; 
+                    textarea.focus();
+                }
+            }
+        }
+        
+        function createMatrixEffect(canvas) {
+            const ctx = canvas.getContext('2d');
+            const chars = ('アァカサタナハマヤャラワガザダバパ' + 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' + '0123456789' + '!@#$%^&*()_+').split('');
+            let fontSize = 16;
+            let columns;
+            let drops = [];
+            
+            function initializeMatrix() {
+                const container = canvas.closest('.window-content');
+                // Ensure canvas size is based on the window content area
+                const headerHeight = canvas.closest('.i3-window').querySelector('.window-header').offsetHeight;
+                canvas.width = container.offsetWidth - 16; 
+                canvas.height = container.offsetHeight - headerHeight - 16; 
+
+                columns = Math.floor(canvas.width / fontSize);
+                drops = [];
+                for (let x = 0; x < columns; x++) {
+                    drops[x] = 1; 
+                }
+            }
+            initializeMatrix();
+            const observer = new ResizeObserver(() => { initializeMatrix(); });
+            observer.observe(canvas.closest('.i3-window'));
+
+            function draw() {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#0f0'; 
+                ctx.font = fontSize + 'px monospace';
+
+                for (let i = 0; i < drops.length; i++) {
+                    const text = chars[Math.floor(Math.random() * chars.length)];
+                    const x = i * fontSize;
+                    const y = drops[i] * fontSize;
+                    ctx.fillText(text, x, y);
+
+                    if (y * 0.9 > canvas.height && Math.random() > 0.975) {
+                        drops[i] = 0;
+                    }
+                    drops[i]++;
+                }
+            }
+            setInterval(draw, 33); 
+        }
+
+        const PROMPT_TEXT = '<span class="text-cyan-400">goreck-web</span><span class="text-white">@</span><span class="text-green-400">canvas</span>:<span class="text-blue-400">~</span>$ ';
+
+        function getTerminalElements() {
+            const terminalEl = document.getElementById('w1');
+            if (!terminalEl) return null; // Check if element exists before checking visibility
+            return {
+                output: terminalEl.querySelector('#terminal-output'),
+                input: terminalEl.querySelector('#terminal-input'),
+                inputContainer: terminalEl.querySelector('#terminal-input-container'),
+                windowEl: terminalEl
+            };
+        }
+        
+        function renderTerminalOutput() {
+            const elements = getTerminalElements();
+            if (!elements || elements.windowEl.classList.contains('hidden')) return;
+
+            const { output } = elements;
+
+            output.innerHTML = terminalHistory.map(entry => {
+                if (entry.role === 'user') {
+                    return PROMPT_TEXT + entry.text;
+                }
+                return `<span class="text-gray-300">${entry.text.replace(/\n/g, '<br>')}</span>`; 
+            }).join('<br>');
+            
+            output.scrollTop = output.scrollHeight;
+
+            setTimeout(() => {
+                elements.input.focus();
+            }, 10); 
+        }
+
+        async function handleCommand(e) {
+            if (e.key !== 'Enter') return;
+            const elements = getTerminalElements();
+            if (!elements || elements.input.disabled) return;
+            
+            const { input, output, inputContainer } = elements;
+            
+            const command = input.value.trim();
+            if (command === '') {
+                terminalHistory.push({ role: 'user', text: '' });
+                renderTerminalOutput();
+                return;
+            }
+
+            terminalHistory.push({ role: 'user', text: command });
+            input.value = '';
+            input.disabled = true;
+            inputContainer.classList.add('opacity-50');
+            renderTerminalOutput();
+            
+            const loadingIndex = terminalHistory.length;
+            terminalHistory.push({ role: 'llm', text: '<span class="text-yellow-400">loading...</span>' });
+            renderTerminalOutput();
+            
+            let success = false;
+            try {
+                const payload = {
+                    contents: [{ parts: [{ text: command }] }],
+                    systemInstruction: { parts: [{ text: SHELL_PROMPT }] },
+                    generationConfig: {
+                        temperature: 0.7 
+                    }
+                };
+
+                const response = await fetchWithBackoff(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "Error: Failed to get response from server.";
+
+                terminalHistory[loadingIndex] = { role: 'llm', text: text };
+                success = true;
+            } catch (error) {
+                console.error('API or Fetch Error:', error);
+                const errorMessage = `Error: Connection failed. Check network or API key setup.`;
+                terminalHistory[loadingIndex] = { role: 'llm', text: errorMessage };
+                success = false;
+            } finally {
+                if (success) { playSuccessTone(); } else { playFailureTone(); }
+                input.disabled = false;
+                inputContainer.classList.remove('opacity-50');
+                renderTerminalOutput();
+            }
+        }
+        
+        async function fetchWithBackoff(url, options, maxRetries = 5) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.status !== 429) return response; 
+                } catch (error) {
+                    console.error('Fetch attempt failed:', error);
+                }
+                const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+            throw new Error('API request failed after multiple retries.');
+        }
+
+        function generateContent(config) {
+            switch (config.type) {
+                case 'terminal':
+                    return `
+                        <div id="terminal-output">
+                            Welcome to <span class="text-cyan-400">GoreckiOS</span> web-desktop simulation.
+                            <br>Encryption key derived from hardcoded master password.
+                            <br>Type 'help' or any Linux command to interact with the LLM shell.
+                            <br><br>
+                        </div>
+                        <div id="terminal-input-container">
+                            <span class="prompt">${PROMPT_TEXT}</span>
+                            <input id="terminal-input" type="text" autocomplete="off" onkeydown="handleCommand(event)" />
+                        </div>
+                    `;
+                case 'text':
+                    return `<textarea id="config-textarea" class="bg-transparent w-full h-full p-2 resize-none outline-none" placeholder="Loading content..."></textarea>`;
+                case 'cmatrix-window':
+                    return `<div class="cmatrix-container"><canvas id="matrix-canvas"></canvas></div>`;
+                default:
+                    return `<div class="p-2">Default window content.</div>`;
+            }
+        }
+        
+        function updateTaskbar() {
+            taskbarEl.innerHTML = ''; 
+            
+            windows.forEach(win => {
+                const button = document.createElement('div');
+                button.id = `taskbar-item-${win.el.id}`;
+                button.classList.add('taskbar-item');
+                button.textContent = win.config.title;
+                button.setAttribute('data-window-id', win.el.id);
+                
+                if (win.el === focusedWindow && !win.el.classList.contains('hidden')) {
+                    button.classList.add('active');
+                } else if (!win.el.classList.contains('hidden')) {
+                    button.classList.remove('active');
+                }
+
+                if (win.el.classList.contains('hidden')) {
+                    button.classList.remove('active');
+                    // Add a visual cue for minimized windows
+                    button.style.opacity = 0.5;
+                } else {
+                    button.style.opacity = 1.0;
+                }
+                
+                button.addEventListener('click', () => {
+                    if (win.el.classList.contains('hidden')) {
+                        restoreWindow(win.el); // Restore if hidden
+                    } else if (win.el === focusedWindow) {
+                        handleWindowControl({ target: { getAttribute: () => 'minimize' } }, win.el); // Minimize if active
+                    } else {
+                        focusWindow(win.el); // Focus if visible but not active
+                    }
+                });
+                taskbarEl.appendChild(button);
+            });
+        }
+        
+        function restoreWindow(windowEl) {
+            windowEl.classList.remove('hidden');
+            focusWindow(windowEl);
+            tileWindows(); // Retile in case it was tiled when hidden
+            updateTaskbar();
+        }
+
+        function createWindowEl(config, savedState = {}) {
+            const windowEl = document.createElement('div');
+            windowEl.id = config.id;
+            windowEl.classList.add('i3-window', 'shadow-2xl', 'absolute'); 
+            
+            let winData = { 
+                el: windowEl, 
+                config: { ...config, currentWorkspace: currentWorkspace },
+                isFloating: savedState.isFloating !== undefined ? savedState.isFloating : config.isFloating, 
+                lastMetrics: savedState.lastMetrics || {},
+            };
+            
+            // Apply saved visibility state (default to not hidden)
+            if (savedState.lastMetrics && savedState.lastMetrics.isHidden) {
+                windowEl.classList.add('hidden');
+            }
+
+            if (config.type === 'text') {
+                if (savedState.content !== undefined) {
+                    winData.config.content = savedState.content; 
+                } else if (config.id === 'w2') {
+                    winData.config.content = configContent; 
+                } else if (config.content) {
+                    winData.config.content = config.content;
+                } else {
+                     winData.config.content = `[Window ${config.id}] Starting blank document on Workspace ${currentWorkspace}.`;
+                }
+            }
+
+            const contentClass = config.type === 'cmatrix-window' ? 'window-content p-0' : 'window-content';
+
+            windowEl.innerHTML = `
+                <div class="window-header" data-window-id="${config.id}">
+                    <span class="window-title">${config.title}</span>
+                    <div class="window-controls">
+                        <button class="minimize-btn" title="Minimize" data-action="minimize"></button>
+                        <button class="maximize-btn" title="Toggle Floating Mode" data-action="toggle-floating"></button>
+                        <button class="close-btn" title="Close" data-action="close"></button>
+                    </div>
+                </div>
+                <div class="${contentClass}">
+                    ${generateContent(config)}
+                </div>
+            `;
+            
+            // Apply saved or default metrics
+            if (winData.isFloating && winData.lastMetrics.width && !windowEl.classList.contains('hidden')) {
+                applyMetrics(windowEl, winData.lastMetrics);
+            } else {
+                const metrics = calculateTiledMetrics(config.ratio);
+                applyMetrics(windowEl, metrics);
+                winData.lastMetrics = metrics;
+            }
+
+            desktopEl.appendChild(windowEl);
+            
+            // Only focus on mousedown, not drag
+            windowEl.addEventListener('mousedown', (e) => { 
+                if (e.target.closest('.window-header')) return; 
+                focusWindow(windowEl); 
+            }); 
+            windowEl.addEventListener('mouseup', saveState); 
+            
+            windowEl.querySelector('.window-header').addEventListener('mousedown', startDrag);
+            windowEl.querySelectorAll('.window-controls button').forEach(button => {
+                button.addEventListener('click', (e) => handleWindowControl(e, windowEl));
+            });
+            
+            if (config.type === 'cmatrix-window') {
+                const canvas = windowEl.querySelector('#matrix-canvas');
+                if (canvas) {
+                    // C-Matrix initialization now happens here
+                    createMatrixEffect(canvas);
+                }
+            }
+
+            return winData;
+        }
+        
+        function switchWorkspace(targetId) {
+            if (targetId === currentWorkspace) return;
+
+            // Save the state of the currently focused window before switching
+            if (focusedWindow) { focusWindow(focusedWindow); }
+
+            // Hide all windows
+            document.querySelectorAll('.i3-window').forEach(el => el.classList.add('hidden'));
+
+            const bar = getWorkspaceBar();
+            bar.querySelectorAll('.workspace-btn').forEach(btn => {
+                btn.classList.remove('bg-cyan-600', 'text-gray-900', 'font-bold');
+                btn.classList.add('hover:bg-gray-700');
+            });
+
+            const newButton = bar.querySelector(`[data-workspace-id="${targetId}"]`);
+            if (newButton) {
+                newButton.classList.add('bg-cyan-600', 'text-gray-900', 'font-bold');
+                newButton.classList.remove('hover:bg-gray-700');
+            }
+
+            currentWorkspace = targetId;
+            windows = [];
+
+            const configsToLoad = WORKSPACES[targetId] || [];
+
+            let windowToFocus = null;
+
+            configsToLoad.forEach(config => {
+                let win = allWindows[config.id];
+                
+                // If window exists and should be on this workspace
+                if (win) {
+                    // Only show if it wasn't explicitly hidden (minimized) when we saved
+                    if (!win.lastMetrics.isHidden) {
+                        win.el.classList.remove('hidden');
+                        windows.push(win);
+                        windowToFocus = win.el;
+                    }
+                } 
+            });
+
+            tileWindows();
+            updateTaskbar();
+
+            if (windowToFocus) {
+                 focusWindow(windowToFocus);
+            } else {
+                focusedWindow = null;
+                updateTaskbar(); // Ensure taskbar update happens even if no window is focused
+            }
+        }
+        
+        function initWorkspaceListeners() {
+            const bar = getWorkspaceBar();
+            bar.addEventListener('click', (e) => {
+                const targetId = e.target.getAttribute('data-workspace-id');
+                if (targetId) {
+                    switchWorkspace(targetId);
+                }
+            });
+        }
+
+        function handleWindowControl(e, windowEl) {
+            const action = e.target.getAttribute('data-action');
+            const win = allWindows[windowEl.id];
+
+            if (!win) return;
+            e.stopPropagation();
+
+            switch (action) {
+                case 'close':
+                    windowEl.classList.add('hidden');
+                    // Remove from 'windows' array to prevent taskbar display
+                    windows = windows.filter(w => w.el.id !== windowEl.id); 
+                    // Find the next visible window in the current workspace to focus
+                    const visibleWindowsAfterClose = windows.filter(w => !w.el.classList.contains('hidden')).map(w => w.el);
+                    focusedWindow = visibleWindowsAfterClose.length > 0 ? visibleWindowsAfterClose[0] : null;
+                    if(focusedWindow) focusWindow(focusedWindow);
+                    break;
+
+                case 'minimize':
+                    windowEl.classList.add('hidden');
+                    // Save the hidden state
+                    win.lastMetrics.isHidden = true; 
+                    
+                    if (focusedWindow === windowEl) {
+                        focusedWindow = null;
+                        
+                        // Find the next visible window in the current workspace to focus
+                        const visibleWindowsAfterMin = windows.filter(w => !w.el.classList.contains('hidden')).map(w => w.el);
+                        if (visibleWindowsAfterMin.length > 0) {
+                            focusWindow(visibleWindowsAfterMin[0]);
+                        }
+                    }
+                    break;
+
+                case 'toggle-floating':
+                    win.isFloating = !win.isFloating;
+                    
+                    windowEl.classList.add('no-transition');
+                    
+                    if (win.isFloating) {
+                        // Switch from tiled to floating position (center it)
+                        const floatW = Math.max(desktopEl.clientWidth * 0.5, 400);
+                        const floatH = Math.max(desktopEl.clientHeight * 0.6, 300);
+                        const floatL = (desktopEl.clientWidth - floatW) / 2;
+                        const floatT = (desktopEl.clientHeight - floatH) / 2;
+                        
+                        applyMetrics(windowEl, { left: floatL, top: floatT, width: floatW, height: floatH });
+                        focusWindow(windowEl); 
+                    } else {
+                        // Switch from floating to tiled position (re-tile)
+                        const metrics = calculateTiledMetrics(win.config.ratio);
+                        applyMetrics(windowEl, metrics);
+                        win.lastMetrics = metrics;
+                    }
+                    
+                    // Allow CSS transitions to resume after a slight delay
+                    setTimeout(() => {
+                        windowEl.classList.remove('no-transition');
+                        saveState(); 
+                    }, 10);
+                    break;
+            }
+            updateTaskbar();
+            saveState();
+        }
+
+        function startDrag(e) {
+            const headerEl = e.currentTarget;
+            const windowEl = headerEl.closest('.i3-window');
+            const win = allWindows[windowEl.id];
+
+            // Only allow dragging if the window is in floating mode
+            if (!win || !win.isFloating) return; 
+            
+            // Ensure the window is focused before starting the drag
+            focusWindow(windowEl);
+            isDragging = true;
+            
+            // Disable CSS transitions during drag
+            windowEl.classList.add('no-transition');
+            
+            dragOffsetX = e.clientX - windowEl.offsetLeft;
+            dragOffsetY = e.clientY - windowEl.offsetTop;
+
+            windowEl.style.cursor = 'grabbing';
+            headerEl.style.cursor = 'grabbing';
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', endDrag);
+            e.preventDefault(); 
+        }
+
+        function drag(e) {
+            if (!isDragging || !focusedWindow) return;
+
+            const win = allWindows[focusedWindow.id];
+            // Re-check floating status just in case
+            if (!win || !win.isFloating) return;
+
+            let newX = e.clientX - dragOffsetX;
+            let newY = e.clientY - dragOffsetY;
+
+            // Constrain movement within the desktop boundaries
+            const maxLeft = desktopEl.clientWidth - focusedWindow.offsetWidth - GAP_SIZE;
+            const maxTop = desktopEl.clientHeight - focusedWindow.offsetHeight - GAP_SIZE;
+
+            newX = Math.max(GAP_SIZE, Math.min(newX, maxLeft));
+            newY = Math.max(GAP_SIZE, Math.min(newY, maxTop));
+            
+            focusedWindow.style.left = `${newX}px`;
+            focusedWindow.style.top = `${newY}px`;
+
+            // Update metrics while dragging
+            win.lastMetrics.left = newX;
+            win.lastMetrics.top = newY;
+        }
+
+        function endDrag() {
+            if (!isDragging || !focusedWindow) return;
+
+            isDragging = false;
+            
+            focusedWindow.classList.remove('no-transition');
+            
+            focusedWindow.style.cursor = 'default';
+            focusedWindow.querySelector('.window-header').style.cursor = 'grab';
+
+            document.removeEventListener('mousemove', drag);
+            document.removeEventListener('mouseup', endDrag);
+            
+            saveState();
+        }
+
+        // --- Initialization ---
+
+        function initToneJs() {
+            successSynth = new Tone.Synth({
+                oscillator: { type: "triangle" },
+                envelope: {
+                    attack: 0.005,
+                    decay: 0.1,
+                    sustain: 0.01,
+                    release: 0.1
+                }
+            }).toDestination();
+        }
+
+        /** Main initialization function, called after successful password entry. */
+        window.initDesktop = function(loadedStates) {
+            initToneJs();
+            setInterval(updateDateTime, 1000);
+            updateDateTime();
+            
+            let initialWorkspace = '1';
+            
+            // 5. Create all windows configured in WORKSPACES, applying loaded state
+            Object.values(WORKSPACES).flat().forEach(config => {
+                const savedState = loadedStates[config.id] || {};
+                
+                if (allWindows[config.id]) return;
+
+                const win = createWindowEl(config, savedState);
+                allWindows[config.id] = win;
+            });
+            
+            // After creating all, explicitly initialize 'windows' list for the current workspace
+            windows = (WORKSPACES[initialWorkspace] || [])
+                        .map(config => allWindows[config.id])
+                        .filter(win => win && !win.el.classList.contains('hidden'));
+
+            switchWorkspace(initialWorkspace);
+
+            window.addEventListener('resize', tileWindows);
+            initWorkspaceListeners();
+
+            tileWindows();
+            updateTaskbar();
+        }
+        
+        // This is now automatically called after Firebase auth in the <script type="module"> block
+        
+    </script>
+</body>
+</html>
     <script src="https://unpkg.com/tone@14.8.49/build/Tone.js"></script>
     
     <!-- Firebase SDK Imports (Module style for modern JS) -->
