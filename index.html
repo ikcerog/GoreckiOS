@@ -11,6 +11,20 @@
     <!-- Tone.js CDN for sound effects -->
     <!-- This must load before the module script tries to use the 'Tone' global -->
     <script src="https://unpkg.com/tone@148/build/Tone.js"></script>
+
+    <!-- Functional Libraries for enhanced functionality -->
+    <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.10/dayjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.10/plugin/relativeTime.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+
+    <!-- Initialize Day.js plugins -->
+    <script>
+        if (typeof dayjs !== 'undefined' && typeof dayjs_plugin_relativeTime !== 'undefined') {
+            dayjs.extend(dayjs_plugin_relativeTime);
+        }
+    </script>
     
     <!-- Firebase SDK Imports (Module style for modern JS) -->
     <script type="module">
@@ -309,6 +323,224 @@
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.85rem;
         }
+
+        /* Enhanced drag feedback */
+        .i3-window.dragging {
+            opacity: 0.9;
+            box-shadow: 0 8px 32px rgba(0, 189, 212, 0.4);
+            transform: scale(1.01);
+        }
+
+        .window-header.can-drag {
+            cursor: grab;
+        }
+
+        .window-header.can-drag:active {
+            cursor: grabbing;
+        }
+
+        /* RSS Feed Window Styles */
+        .rss-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .rss-header {
+            display: flex;
+            padding: 8px;
+            gap: 8px;
+            border-bottom: 1px solid #3f3f46;
+            background: #1a1a1a;
+        }
+
+        .rss-input {
+            flex: 1;
+            background: #2d2d2d;
+            border: 1px solid #3f3f46;
+            border-radius: 4px;
+            padding: 4px 8px;
+            color: #f3f4f6;
+            font-size: 0.75rem;
+            outline: none;
+        }
+
+        .rss-input:focus {
+            border-color: var(--arch-cyan);
+        }
+
+        .rss-btn {
+            background: var(--arch-cyan);
+            color: #171717;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .rss-btn:hover {
+            background: #00a5bb;
+        }
+
+        .rss-btn.secondary {
+            background: #3f3f46;
+            color: #f3f4f6;
+        }
+
+        .rss-btn.secondary:hover {
+            background: #52525b;
+        }
+
+        .rss-feeds-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            padding: 8px;
+            border-bottom: 1px solid #3f3f46;
+            background: #1f1f1f;
+            max-height: 60px;
+            overflow-y: auto;
+        }
+
+        .rss-feed-tag {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: #2d2d2d;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            color: #a1a1aa;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .rss-feed-tag:hover {
+            background: #3f3f46;
+            color: #f3f4f6;
+        }
+
+        .rss-feed-tag.active {
+            background: var(--arch-cyan);
+            color: #171717;
+        }
+
+        .rss-feed-tag .remove-feed {
+            width: 14px;
+            height: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.3);
+            font-size: 10px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .rss-feed-tag:hover .remove-feed {
+            opacity: 1;
+        }
+
+        .rss-items {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .rss-item {
+            padding: 10px;
+            margin-bottom: 8px;
+            background: #262626;
+            border-radius: 6px;
+            border-left: 3px solid var(--arch-cyan);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .rss-item:hover {
+            background: #2d2d2d;
+            transform: translateX(2px);
+        }
+
+        .rss-item-title {
+            color: #f3f4f6;
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-bottom: 4px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .rss-item-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7rem;
+            color: #71717a;
+        }
+
+        .rss-item-source {
+            color: var(--arch-cyan);
+        }
+
+        .rss-item-description {
+            font-size: 0.75rem;
+            color: #a1a1aa;
+            margin-top: 6px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .rss-loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100px;
+            color: #71717a;
+        }
+
+        .rss-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 200px;
+            color: #71717a;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .rss-empty-icon {
+            font-size: 2rem;
+            margin-bottom: 12px;
+            opacity: 0.5;
+        }
+
+        /* Scrollbar styling for RSS */
+        .rss-items::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .rss-items::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+
+        .rss-items::-webkit-scrollbar-thumb {
+            background: #3f3f46;
+            border-radius: 3px;
+        }
+
+        .rss-items::-webkit-scrollbar-thumb:hover {
+            background: var(--arch-cyan);
+        }
     </style>
 </head>
 
@@ -381,16 +613,28 @@ bindsym $mod+Return exec i3-sensible-terminal
         
         const WORKSPACES = {
             '1': [
-                { id: 'w1', title: 'Terminal - bash (GoreckiOS Shell)', type: 'terminal', ratio: [0, 0, 70, 100], isFloating: false, content: null }, 
+                { id: 'w1', title: 'Terminal - bash (GoreckiOS Shell)', type: 'terminal', ratio: [0, 0, 70, 100], isFloating: false, content: null },
                 { id: 'w2', title: 'neovim /etc/config.txt', type: 'text', ratio: [70, 0, 30, 50], isFloating: false, content: null },
-                { id: 'w3', title: 'Background Process: Matrix', type: 'cmatrix-window', ratio: [70, 50, 30, 50], isFloating: false, content: null } 
+                { id: 'w3', title: 'Background Process: Matrix', type: 'cmatrix-window', ratio: [70, 50, 30, 50], isFloating: false, content: null }
             ],
             '2': [
-                { id: 'w4', title: 'Project Alpha - Documentation', type: 'text', ratio: [10, 10, 80, 80], isFloating: true, content: 'This is a floating document on Workspace 2. Edits here are saved.' } 
+                { id: 'w4', title: 'Project Alpha - Documentation', type: 'text', ratio: [10, 10, 80, 80], isFloating: true, content: 'This is a floating document on Workspace 2. Edits here are saved.' }
             ],
-            '3': [], 
-            '4': []  
+            '3': [
+                { id: 'w5', title: 'RSS Feed Reader', type: 'rss', ratio: [0, 0, 100, 100], isFloating: false, content: null }
+            ],
+            '4': []
         };
+
+        // RSS Feed State Management
+        let rssFeeds = [
+            { url: 'https://hnrss.org/frontpage', name: 'Hacker News' },
+            { url: 'https://www.archlinux.org/feeds/news/', name: 'Arch Linux' },
+            { url: 'https://feeds.arstechnica.com/arstechnica/technology-lab', name: 'Ars Technica' }
+        ];
+        let rssFeedItems = [];
+        let rssActiveFeed = null; // null means show all
+        let rssLoading = false;
 
         // State Management
         let allWindows = {};
@@ -852,7 +1096,7 @@ bindsym $mod+Return exec i3-sensible-terminal
             for (let i = 0; i < maxRetries; i++) {
                 try {
                     const response = await fetch(url, options);
-                    if (response.status !== 429) return response; 
+                    if (response.status !== 429) return response;
                 } catch (error) {
                     // Fail silently on console for backoff
                 }
@@ -861,6 +1105,339 @@ bindsym $mod+Return exec i3-sensible-terminal
             }
             throw new Error('API request failed after multiple retries.');
         }
+
+        // --- RSS Feed Functions ---
+
+        const RSS_CORS_PROXIES = [
+            'https://api.allorigins.win/raw?url=',
+            'https://corsproxy.io/?',
+            'https://api.codetabs.com/v1/proxy?quest='
+        ];
+
+        async function fetchRSSFeed(feedUrl) {
+            let lastError = null;
+
+            for (const proxy of RSS_CORS_PROXIES) {
+                try {
+                    const response = await fetch(proxy + encodeURIComponent(feedUrl), {
+                        headers: { 'Accept': 'application/rss+xml, application/xml, text/xml' }
+                    });
+
+                    if (!response.ok) continue;
+
+                    const text = await response.text();
+                    return parseRSSFeed(text, feedUrl);
+                } catch (error) {
+                    lastError = error;
+                    continue;
+                }
+            }
+
+            console.error('All RSS proxies failed for:', feedUrl, lastError);
+            return [];
+        }
+
+        function parseRSSFeed(xmlText, sourceUrl) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(xmlText, 'text/xml');
+            const items = [];
+
+            // Find feed name
+            const feedName = rssFeeds.find(f => f.url === sourceUrl)?.name || 'Unknown';
+
+            // Check for RSS format
+            const rssItems = doc.querySelectorAll('item');
+            if (rssItems.length > 0) {
+                rssItems.forEach(item => {
+                    const title = item.querySelector('title')?.textContent || 'No Title';
+                    const link = item.querySelector('link')?.textContent || '#';
+                    const description = item.querySelector('description')?.textContent || '';
+                    const pubDate = item.querySelector('pubDate')?.textContent;
+                    const dcDate = item.querySelector('date')?.textContent;
+
+                    items.push({
+                        title: sanitizeText(title),
+                        link: link.trim(),
+                        description: sanitizeHTML(description),
+                        pubDate: pubDate || dcDate || null,
+                        source: feedName,
+                        sourceUrl: sourceUrl
+                    });
+                });
+            }
+
+            // Check for Atom format
+            const atomEntries = doc.querySelectorAll('entry');
+            if (atomEntries.length > 0) {
+                atomEntries.forEach(entry => {
+                    const title = entry.querySelector('title')?.textContent || 'No Title';
+                    const linkEl = entry.querySelector('link[href]');
+                    const link = linkEl?.getAttribute('href') || '#';
+                    const summary = entry.querySelector('summary')?.textContent ||
+                                    entry.querySelector('content')?.textContent || '';
+                    const published = entry.querySelector('published')?.textContent ||
+                                      entry.querySelector('updated')?.textContent;
+
+                    items.push({
+                        title: sanitizeText(title),
+                        link: link.trim(),
+                        description: sanitizeHTML(summary),
+                        pubDate: published || null,
+                        source: feedName,
+                        sourceUrl: sourceUrl
+                    });
+                });
+            }
+
+            return items;
+        }
+
+        function sanitizeText(text) {
+            if (typeof DOMPurify !== 'undefined') {
+                return DOMPurify.sanitize(text, { ALLOWED_TAGS: [] });
+            }
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function sanitizeHTML(html) {
+            if (typeof DOMPurify !== 'undefined') {
+                return DOMPurify.sanitize(html, {
+                    ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'br'],
+                    ALLOWED_ATTR: ['href']
+                });
+            }
+            return sanitizeText(html);
+        }
+
+        function formatRelativeTime(dateStr) {
+            if (!dateStr) return '';
+            try {
+                if (typeof dayjs !== 'undefined') {
+                    const date = dayjs(dateStr);
+                    if (date.isValid()) {
+                        return date.fromNow();
+                    }
+                }
+                // Fallback
+                const date = new Date(dateStr);
+                if (!isNaN(date.getTime())) {
+                    const now = new Date();
+                    const diffMs = now - date;
+                    const diffMins = Math.floor(diffMs / 60000);
+                    const diffHours = Math.floor(diffMs / 3600000);
+                    const diffDays = Math.floor(diffMs / 86400000);
+
+                    if (diffMins < 60) return `${diffMins}m ago`;
+                    if (diffHours < 24) return `${diffHours}h ago`;
+                    return `${diffDays}d ago`;
+                }
+            } catch (e) {
+                return '';
+            }
+            return '';
+        }
+
+        async function refreshAllRSSFeeds() {
+            rssLoading = true;
+            renderRSSContent();
+
+            const allItems = [];
+
+            // Fetch all feeds in parallel using lodash if available
+            const fetchPromises = rssFeeds.map(feed => fetchRSSFeed(feed.url));
+            const results = await Promise.allSettled(fetchPromises);
+
+            results.forEach((result, index) => {
+                if (result.status === 'fulfilled' && result.value) {
+                    allItems.push(...result.value);
+                }
+            });
+
+            // Sort by date (newest first) using lodash if available
+            if (typeof _ !== 'undefined') {
+                rssFeedItems = _.orderBy(allItems, [
+                    item => item.pubDate ? new Date(item.pubDate).getTime() : 0
+                ], ['desc']);
+            } else {
+                rssFeedItems = allItems.sort((a, b) => {
+                    const dateA = a.pubDate ? new Date(a.pubDate).getTime() : 0;
+                    const dateB = b.pubDate ? new Date(b.pubDate).getTime() : 0;
+                    return dateB - dateA;
+                });
+            }
+
+            rssLoading = false;
+            renderRSSContent();
+            saveRSSState();
+        }
+
+        function getFilteredRSSItems() {
+            if (!rssActiveFeed) return rssFeedItems;
+            return rssFeedItems.filter(item => item.sourceUrl === rssActiveFeed);
+        }
+
+        function renderRSSContent() {
+            const rssWindow = document.getElementById('w5');
+            if (!rssWindow || rssWindow.classList.contains('hidden')) return;
+
+            const itemsContainer = rssWindow.querySelector('.rss-items');
+            const feedsList = rssWindow.querySelector('.rss-feeds-list');
+
+            if (!itemsContainer || !feedsList) return;
+
+            // Render feed tags
+            feedsList.innerHTML = `
+                <div class="rss-feed-tag ${!rssActiveFeed ? 'active' : ''}" data-feed-url="">
+                    All Feeds
+                </div>
+                ${rssFeeds.map(feed => `
+                    <div class="rss-feed-tag ${rssActiveFeed === feed.url ? 'active' : ''}" data-feed-url="${feed.url}">
+                        ${sanitizeText(feed.name)}
+                        <span class="remove-feed" data-remove-url="${feed.url}">✕</span>
+                    </div>
+                `).join('')}
+            `;
+
+            // Add click handlers to feed tags
+            feedsList.querySelectorAll('.rss-feed-tag').forEach(tag => {
+                tag.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('remove-feed')) {
+                        e.stopPropagation();
+                        const urlToRemove = e.target.getAttribute('data-remove-url');
+                        removeRSSFeed(urlToRemove);
+                        return;
+                    }
+                    const feedUrl = tag.getAttribute('data-feed-url');
+                    rssActiveFeed = feedUrl || null;
+                    renderRSSContent();
+                });
+            });
+
+            // Render items
+            if (rssLoading) {
+                itemsContainer.innerHTML = '<div class="rss-loading">Loading feeds...</div>';
+                return;
+            }
+
+            const filteredItems = getFilteredRSSItems();
+
+            if (filteredItems.length === 0) {
+                itemsContainer.innerHTML = `
+                    <div class="rss-empty">
+                        <div class="rss-empty-icon">📡</div>
+                        <div>No feed items yet.</div>
+                        <div style="font-size: 0.7rem; margin-top: 8px;">
+                            Add RSS feed URLs above or click Refresh to load feeds.
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            // Limit to 50 items for performance
+            const displayItems = filteredItems.slice(0, 50);
+
+            itemsContainer.innerHTML = displayItems.map(item => `
+                <div class="rss-item" onclick="window.open('${item.link}', '_blank')">
+                    <div class="rss-item-title">${item.title}</div>
+                    <div class="rss-item-meta">
+                        <span class="rss-item-source">${item.source}</span>
+                        <span>${formatRelativeTime(item.pubDate)}</span>
+                    </div>
+                    ${item.description ? `<div class="rss-item-description">${item.description}</div>` : ''}
+                </div>
+            `).join('');
+        }
+
+        function addRSSFeed(url, name) {
+            // Validate URL
+            try {
+                new URL(url);
+            } catch {
+                alert('Invalid URL format');
+                return false;
+            }
+
+            // Check for duplicates
+            if (rssFeeds.some(f => f.url === url)) {
+                alert('Feed already exists');
+                return false;
+            }
+
+            // Auto-generate name from URL if not provided
+            if (!name) {
+                try {
+                    const urlObj = new URL(url);
+                    name = urlObj.hostname.replace('www.', '');
+                } catch {
+                    name = 'New Feed';
+                }
+            }
+
+            rssFeeds.push({ url, name });
+            saveRSSState();
+            refreshAllRSSFeeds();
+            return true;
+        }
+
+        function removeRSSFeed(url) {
+            rssFeeds = rssFeeds.filter(f => f.url !== url);
+            rssFeedItems = rssFeedItems.filter(item => item.sourceUrl !== url);
+
+            if (rssActiveFeed === url) {
+                rssActiveFeed = null;
+            }
+
+            saveRSSState();
+            renderRSSContent();
+        }
+
+        function handleRSSAddFeed(e) {
+            if (e.key !== 'Enter') return;
+
+            const input = e.target;
+            const url = input.value.trim();
+
+            if (url && addRSSFeed(url)) {
+                input.value = '';
+            }
+        }
+
+        function saveRSSState() {
+            // RSS state will be saved as part of window content
+            const rssWindow = allWindows['w5'];
+            if (rssWindow) {
+                rssWindow.config.content = JSON.stringify({
+                    feeds: rssFeeds,
+                    items: rssFeedItems.slice(0, 100), // Save last 100 items
+                    activeFeed: rssActiveFeed
+                });
+            }
+            saveState();
+        }
+
+        function loadRSSState(savedContent) {
+            if (!savedContent) return;
+
+            try {
+                const data = JSON.parse(savedContent);
+                if (data.feeds && Array.isArray(data.feeds)) {
+                    rssFeeds = data.feeds;
+                }
+                if (data.items && Array.isArray(data.items)) {
+                    rssFeedItems = data.items;
+                }
+                if (data.activeFeed !== undefined) {
+                    rssActiveFeed = data.activeFeed;
+                }
+            } catch (e) {
+                console.error('Failed to load RSS state:', e);
+            }
+        }
+
+        // --- End RSS Feed Functions ---
 
         function generateContent(config) {
             switch (config.type) {
@@ -881,6 +1458,21 @@ bindsym $mod+Return exec i3-sensible-terminal
                     return `<textarea id="config-textarea" class="bg-transparent w-full h-full p-2 resize-none outline-none" placeholder="Loading content..."></textarea>`;
                 case 'cmatrix-window':
                     return `<div class="cmatrix-container"><canvas id="matrix-canvas"></canvas></div>`;
+                case 'rss':
+                    return `
+                        <div class="rss-container">
+                            <div class="rss-header">
+                                <input type="text" class="rss-input" placeholder="Add RSS feed URL..." onkeydown="handleRSSAddFeed(event)" />
+                                <button class="rss-btn" onclick="refreshAllRSSFeeds()">Refresh</button>
+                            </div>
+                            <div class="rss-feeds-list">
+                                <!-- Feed tags will be rendered here -->
+                            </div>
+                            <div class="rss-items">
+                                <!-- Feed items will be rendered here -->
+                            </div>
+                        </div>
+                    `;
                 default:
                     return `<div class="p-2">Default window content.</div>`;
             }
@@ -964,7 +1556,7 @@ bindsym $mod+Return exec i3-sensible-terminal
             const contentClass = config.type === 'cmatrix-window' ? 'window-content p-0' : 'window-content';
 
             windowEl.innerHTML = `
-                <div class="window-header" data-window-id="${config.id}">
+                <div class="window-header can-drag" data-window-id="${config.id}">
                     <span class="window-title">${config.title}</span>
                     <div class="window-controls">
                         <button class="minimize-btn" title="Minimize" data-action="minimize"></button>
@@ -1006,6 +1598,21 @@ bindsym $mod+Return exec i3-sensible-terminal
                     // C-Matrix initialization now happens here
                     createMatrixEffect(canvas);
                 }
+            }
+
+            // Initialize RSS window with saved state
+            if (config.type === 'rss') {
+                if (winData.config.content) {
+                    loadRSSState(winData.config.content);
+                }
+                // Render initial RSS content after a brief delay to ensure DOM is ready
+                setTimeout(() => {
+                    renderRSSContent();
+                    // Auto-refresh feeds on first load if no cached items
+                    if (rssFeedItems.length === 0) {
+                        refreshAllRSSFeeds();
+                    }
+                }, 100);
             }
 
             return winData;
@@ -1057,10 +1664,15 @@ bindsym $mod+Return exec i3-sensible-terminal
             updateTaskbar();
 
             if (windowToFocus) {
-                 focusWindow(windowToFocus);
+                focusWindow(windowToFocus);
             } else {
                 focusedWindow = null;
-                updateTaskbar(); 
+                updateTaskbar();
+            }
+
+            // Re-render RSS content when switching to workspace 3
+            if (targetId === '3') {
+                setTimeout(() => renderRSSContent(), 50);
             }
         }
         
@@ -1151,40 +1763,76 @@ bindsym $mod+Return exec i3-sensible-terminal
             saveState();
         }
 
-        // --- Drag Functionality (FIXED) ---
+        // --- Drag Functionality (Enhanced: auto-float on drag) ---
+
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let dragThreshold = 5; // Pixels of movement before auto-floating
 
         function startDrag(e) {
             const headerEl = e.currentTarget;
             const windowEl = headerEl.closest('.i3-window');
             const win = allWindows[windowEl.id];
 
-            // Only allow dragging if the window is in floating mode
-            if (!win || !win.isFloating) return; 
-            
+            if (!win) return;
+
             focusWindow(windowEl);
+
+            // Store initial mouse position to detect drag threshold
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
             isDragging = true;
-            
+
             // Disable CSS transitions during drag
             windowEl.classList.add('no-transition');
-            
+            windowEl.classList.add('dragging');
+
             dragOffsetX = e.clientX - windowEl.offsetLeft;
             dragOffsetY = e.clientY - windowEl.offsetTop;
 
             windowEl.style.cursor = 'grabbing';
             headerEl.style.cursor = 'grabbing';
-            
+
             // Attach listeners to the document to allow dragging outside the window area
             document.addEventListener('mousemove', drag);
             document.addEventListener('mouseup', endDrag);
-            e.preventDefault(); 
+            e.preventDefault();
         }
 
         function drag(e) {
             if (!isDragging || !focusedWindow) return;
 
             const win = allWindows[focusedWindow.id];
-            // Must be floating to drag
-            if (!win || !win.isFloating) return;
+            if (!win) return;
+
+            // Calculate how far we've moved from drag start
+            const deltaX = Math.abs(e.clientX - dragStartX);
+            const deltaY = Math.abs(e.clientY - dragStartY);
+
+            // If window is tiled and user has moved past threshold, auto-float it
+            if (!win.isFloating && (deltaX > dragThreshold || deltaY > dragThreshold)) {
+                win.isFloating = true;
+
+                // Store current size as last metrics for floating mode
+                win.lastMetrics = {
+                    width: focusedWindow.offsetWidth,
+                    height: focusedWindow.offsetHeight,
+                    left: focusedWindow.offsetLeft,
+                    top: focusedWindow.offsetTop,
+                    isHidden: false
+                };
+
+                // Re-tile other windows to fill the gap
+                tileWindows();
+
+                // Play a subtle sound to indicate mode change
+                if (window.playSuccessTone) {
+                    window.playSuccessTone();
+                }
+            }
+
+            // Only move if floating
+            if (!win.isFloating) return;
 
             let newX = e.clientX - dragOffsetX;
             let newY = e.clientY - dragOffsetY;
@@ -1195,7 +1843,7 @@ bindsym $mod+Return exec i3-sensible-terminal
 
             newX = Math.max(GAP_SIZE, Math.min(newX, maxLeft));
             newY = Math.max(GAP_SIZE, Math.min(newY, maxTop));
-            
+
             focusedWindow.style.left = `${newX}px`;
             focusedWindow.style.top = `${newY}px`;
 
@@ -1208,20 +1856,20 @@ bindsym $mod+Return exec i3-sensible-terminal
             if (!isDragging || !focusedWindow) return;
 
             isDragging = false;
-            
+
             focusedWindow.classList.remove('no-transition');
-            
+            focusedWindow.classList.remove('dragging');
+
             focusedWindow.style.cursor = 'default';
             // Ensure the header cursor is reset correctly
             const headerEl = focusedWindow.querySelector('.window-header');
-            if(headerEl) {
-                 headerEl.style.cursor = 'grab';
+            if (headerEl) {
+                headerEl.style.cursor = 'grab';
             }
-
 
             document.removeEventListener('mousemove', drag);
             document.removeEventListener('mouseup', endDrag);
-            
+
             saveState();
         }
 
